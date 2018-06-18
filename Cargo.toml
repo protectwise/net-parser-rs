@@ -1,0 +1,13 @@
+[package]
+name = "net-parser-rs"
+version = "0.1.0"
+authors = ["Danny Browning <danny.browning@protectwise.com>"]
+
+[dependencies]
+arrayref = "~0.3"
+nom = "~4.0"
+error-chain = "~0.11"
+log = "~0.4"
+
+[dev-dependencies]
+env_logger = "*"
