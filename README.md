@@ -1,22 +1,24 @@
-# Network Packet Decoder (net-decoder)
-Basic network decoder leveraging Rust and [nom](https://github.com/Geal/nom) for safe and efficient packet parsing.
+# Network Packet Parser (net-parser-rs)
+Basic network parser leveraging Rust and [nom](https://github.com/Geal/nom) for safe and efficient packet parsing.
 
 ## Getting Started
-Add net-decoder to your dependencies
+Add net-parser-rs to your dependencies
 
 ```toml
 [dependencies]
-net-decoder="~0.1"
+net-parser-rs="~0.1"
 ```
 
 ```rust
-extern crate net_decoder;
+extern crate net_parser_rs;
 
-use net_decoder::NetDecoder;
+use net_parser_rs::NetworkParser;
+use std::*;
 
 ///Parse a file with global header
-let records = NetDecoder::parse_file(file_bytes).expect("Could not parse");
+let file_bytes = include_bytes!("capture.pcap");
+let records = NetworkParser::parse_file(file_bytes).expect("Could not parse");
 
 ///Parse a sequence of one or more packets
-let records = NetDecoder::parse(packet_bytes).expect("Could not parse");
+let records = NetworkParser::parse(packet_bytes).expect("Could not parse");
 ```

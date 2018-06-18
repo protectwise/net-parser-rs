@@ -55,28 +55,28 @@ pub mod record;
 use errors::*;
 use nom::*;
 
-struct NetDecoder<'a> {
+struct NetworkParser<'a> {
     global_header: global_header::GlobalHeader,
     records: std::vec::Vec<record::PcapRecord<'a>>
 }
 
-impl<'a> NetDecoder<'a> {
+impl<'a> NetworkParser<'a> {
     pub fn global_header(&'a self) -> &'a global_header::GlobalHeader {
         &self.global_header
     }
     pub fn records(&'a self) -> &'a std::vec::Vec<record::PcapRecord<'a>> {
         &self.records
     }
-    pub fn parse_file<'b>(input: &'b [u8]) -> IResult<&[u8], NetDecoder<'b>> {
+    pub fn parse_file<'b>(input: &'b [u8]) -> IResult<&[u8], NetworkParser<'b>> {
         let header_res = global_header::GlobalHeader::parse(input);
 
         header_res.and_then(|r| {
             let (rem, header) = r;
 
-            NetDecoder::parse_records(rem, header.endianness()).map(|records_res| {
+            NetworkParser::parse_records(rem, header.endianness()).map(|records_res| {
                 let (records_rem, records) = records_res;
 
-                (records_rem, NetDecoder {
+                (records_rem, NetworkParser {
                     global_header: header,
                     records: records
                 })
@@ -126,7 +126,7 @@ mod tests {
             0x01u8, 0x02u8, 0x03u8, 0x04u8
         ];
 
-        let (rem, f) = NetDecoder::parse_file(raw).expect("Failed to parse");
+        let (rem, f) = NetworkParser::parse_file(raw).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
