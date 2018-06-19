@@ -48,7 +48,7 @@ impl EthernetTypeId {
     }
 }
 
-struct VlanTag {
+pub struct VlanTag {
     vlan_type: VlanTypeId,
     value: [u8; 4]
 }
@@ -74,21 +74,25 @@ fn to_mac_address(i: &[u8]) -> MacAddress {
 named!(mac_address<&[u8], MacAddress>, map!(take!(MAC_LENGTH), to_mac_address));
 
 impl<'a> Ethernet<'a> {
-    fn dst_mac(&'a self) -> &'a MacAddress {
+    pub fn dst_mac(&'a self) -> &'a MacAddress {
         &self.dst_mac
     }
 
-    fn src_mac(&'a self) -> &'a MacAddress {
+    pub fn src_mac(&'a self) -> &'a MacAddress {
         &self.src_mac
     }
 
-    fn vlans(&'a self) -> &'a std::vec::Vec<VlanTag> {
+    pub fn vlans(&'a self) -> &'a std::vec::Vec<VlanTag> {
         &self.vlans
     }
 
-    fn vlan(&self) -> Vlan {
+    pub fn vlan(&self) -> Vlan {
         let opt_vlan = self.vlans.first().map(|v| v.vlan());
         opt_vlan.unwrap_or(0)
+    }
+
+    pub fn layer3(&'a self) -> &'a Layer3<'a> {
+        &self.layer3
     }
 
     fn parse_with_existing_vlan_tag<'b>(
@@ -220,22 +224,29 @@ impl<'a> Ethernet<'a> {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
+    extern crate hex_slice;
+    use self::hex_slice::AsHex;
+
     use super::*;
 
     #[test]
-    fn test_ethernet_to_payload() {
+    fn parse_ethernet_payload() {
+        let _ = env_logger::try_init();
+
         let data = [
             0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
             0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
-            0x00u8, 0x08u8, //payload ethernet
+            0x00u8, 0x04u8, //payload ethernet
             0x01u8, 0x02u8, 0x03u8, 0x04u8
         ];
 
-        let l2 = Ethernet::parse(data, Endianness::Big).expect("Could not parse");
+        let (rem, l2) = Ethernet::parse(&data, Endianness::Big).expect("Could not parse");
 
-        assert_eq!(l2.dst_mac(), b"010203040506");
-        assert_eq!(l2.src_mac(), b"FFEEFDFCFBFA");
-        assert_eq!(l2.vlans(), vec![]);
+        assert!(rem.is_empty());
+        assert_eq!(l2.dst_mac().0, [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]);
+        assert_eq!(l2.src_mac().0, [0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8]);
+        assert!(l2.vlans().is_empty());
 
         let proto_correct = if let Layer3::Payload(_) = l2.layer3() {
             true

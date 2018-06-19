@@ -2,6 +2,7 @@
 #![feature(trace_macros)]
 #[macro_use] pub extern crate arrayref;
 #[macro_use] pub extern crate error_chain;
+#[macro_use(debug, info, error, log)] pub extern crate log;
 #[macro_use] pub extern crate nom;
 
 pub mod prelude {
@@ -73,8 +74,12 @@ impl<'a> NetworkParser<'a> {
         header_res.and_then(|r| {
             let (rem, header) = r;
 
+            debug!("Global header version {}.{}, with endianness {:?}", header.version_major(), header.version_minor(), header.endianness());
+
             NetworkParser::parse_records(rem, header.endianness()).map(|records_res| {
                 let (records_rem, records) = records_res;
+
+                debug!("{} bytes left for record parsing", records_rem.len());
 
                 (records_rem, NetworkParser {
                     global_header: header,
@@ -88,13 +93,21 @@ impl<'a> NetworkParser<'a> {
         let mut records: std::vec::Vec<record::PcapRecord<'b>> = vec![];
         let mut current = input;
 
+        debug!("{} bytes left for record parsing", current.len());
+
         loop {
             match record::PcapRecord::parse(current, endianness) {
                 Ok( (rem, r) ) => {
                     current = rem;
+                    debug!("{} bytes left for record parsing", current.len());
                     records.push(r);
                 }
-                Err(nom::Err::Incomplete(_)) => {
+                Err(nom::Err::Incomplete(nom::Needed::Size(s))) => {
+                    debug!("Needed {} bytes for parsing, only had {}", s, current.len());
+                    break
+                }
+                Err(nom::Err::Incomplete(nom::Needed::Unknown)) => {
+                    debug!("Needed unknown number of bytes for parsing, only had {}", current.len());
                     break
                 }
                 Err(e) => return Err(e)
@@ -107,30 +120,39 @@ impl<'a> NetworkParser<'a> {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
+
     use super::*;
 
     #[test]
-    fn test_file_parse() {
+    fn file_parse() {
+        let _ = env_logger::try_init();
+
         let raw = [
-            0xa1u8, 0xb2, 0xc3, 0xd4u8, //magic number
-            0x04u8, //version major, 4
-            0x02u8, //version minor, 2
+            0x4du8, 0x3c, 0x2b, 0x1au8, //magic number
+            0x00u8, 0x04u8, //version major, 4
+            0x00u8, 0x02u8, //version minor, 2
             0x00u8, 0x00u8, 0x00u8, 0x00u8, //zone, 0
             0x00u8, 0x00u8, 0x00u8, 0x04u8, //sig figs, 4
             0x00u8, 0x00u8, 0x06u8, 0x13u8, //snap length, 1555
             0x00u8, 0x00u8, 0x00u8, 0x02u8, //network, 2
-            //ethernet
+            //record, 16 bytes
+            0x5Bu8, 0x11u8, 0x6Du8, 0xE3u8, //seconds, 1527868899
+            0x00u8, 0x02u8, 0x51u8, 0xF5u8, //microseconds, 152053
+            0x00u8, 0x00u8, 0x00u8, 0x12u8, //actual length, 18
+            0x00u8, 0x00u8, 0x04u8, 0xD0u8, //original length, 1232
+            //ethernet, 18 bytes
             0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
             0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
-            0x00u8, 0x08u8, //payload ethernet
+            0x00u8, 0x04u8, //payload ethernet
             0x01u8, 0x02u8, 0x03u8, 0x04u8
         ];
 
-        let (rem, f) = NetworkParser::parse_file(raw).expect("Failed to parse");
+        let (rem, f) = NetworkParser::parse_file(&raw).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
         assert_eq!(f.global_header().endianness(), Endianness::Big);
-        assert_eq!(f.records().size(), 1);
+        assert_eq!(f.records().len(), 1);
     }
 }

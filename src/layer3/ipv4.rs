@@ -23,6 +23,7 @@ pub struct IPv4<'a> {
 
 fn to_ip_address(i: &[u8]) -> std::net::IpAddr {
     let ipv4 = std::net::Ipv4Addr::from(array_ref![i, 0, ADDRESS_LENGTH].clone());
+    debug!("Parsed {:?} as {}", i, ipv4);
     std::net::IpAddr::V4(ipv4)
 }
 
@@ -62,8 +63,12 @@ impl<'a> IPv4<'a> {
         let header_length = (length_check  & 0x0F) * 4;
 
         let info_res = do_parse!(input,
+
             tos: be_u8 >>
-            length: u16!(endianness) >>
+            length: map!(u16!(endianness), |s| {
+                debug!("Parsing ipv4 with payload length {} less {}", s, header_length);
+                s - (header_length as u16)
+            }) >>
             id: u16!(endianness) >>
             flags: u16!(endianness) >>
             ttl: be_u8 >>
@@ -88,14 +93,15 @@ impl<'a> IPv4<'a> {
 
         info_res
             .and_then(|t| {
-            let (rem, (info, payload)) = t;
-            IPv4::parse_protocol(payload, endianness, info.protocol).map(|r| {
-                (rem, IPv4 {
-                    info: info,
-                    layer4: r.1
+                let (rem, (info, payload)) = t;
+
+                IPv4::parse_protocol(payload, endianness, info.protocol).map(|r| {
+                    (rem, IPv4 {
+                        info: info,
+                        layer4: r.1
+                    })
                 })
             })
-        })
     }
 
     pub(crate) fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> IResult<&'b [u8], IPv4<'b>> {
@@ -113,15 +119,20 @@ impl<'a> IPv4<'a> {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
+    extern crate hex_slice;
+    use self::hex_slice::AsHex;
+
     use super::*;
 
     #[test]
     fn parse_ipv4() {
+        let _ = env_logger::try_init();
 
         let raw = [
             0x45u8, //version and header length
             0x00u8, //tos
-            0x00u8, 0x64u8, //length
+            0x00u8, 0x43u8, //length, 20 bytes for header, 45 bytes for ethernet
             0x00u8, 0x00u8, //id
             0x00u8, 0x00u8, //flags
             0x64u8, //ttl
@@ -143,13 +154,14 @@ mod tests {
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
-            0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
+            0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words (32 bytes)
         ];
 
-        let l3 = IPv4::parse(raw, Endianness::Big).expect("Unable to parse");
+        let (rem, l3) = IPv4::parse(&raw, Endianness::Big).expect("Unable to parse");
 
-        assert_eq!(l3.dst_ip, "1.2.3.4".parse().expect("Could not parse ip address"));
-        assert_eq!(l3.src_ip, "10.11.12.13".parse().expect("Could not parse ip address"));
+        assert!(rem.is_empty());
+        assert_eq!(*l3.src_ip(), "1.2.3.4".parse::<std::net::IpAddr>().expect("Could not parse ip address"));
+        assert_eq!(*l3.dst_ip(), "10.11.12.13".parse::<std::net::IpAddr>().expect("Could not parse ip address"));
 
         let is_tcp = if let Layer4::Tcp(_) = l3.layer4() {
             true

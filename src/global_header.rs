@@ -17,6 +17,10 @@ pub struct GlobalHeader {
 impl GlobalHeader {
     pub fn endianness(&self) -> Endianness { self.endianness }
 
+    pub fn version_major(&self) -> u16 { self.version_major }
+
+    pub fn version_minor(&self) -> u16 { self.version_minor }
+
     pub fn snap_length(&self) -> u32 {
         self.snap_length
     }
@@ -25,9 +29,10 @@ impl GlobalHeader {
         do_parse!(input,
 
             endianness: map!(be_u32, |e| {
+                debug!("Read {} compared to magic number {}", e, MAGIC_NUMBER);
                 match e {
-                    MAGIC_NUMBER => Endianness::Big,
-                    _ => Endianness::Little
+                    MAGIC_NUMBER => Endianness::Little,
+                    _ => Endianness::Big
                 }
             }) >>
             version_major: u16!(endianness) >>
@@ -54,39 +59,48 @@ impl GlobalHeader {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
+
     use super::*;
+
     #[test]
-    fn test_global_header_big_endian() {
+    fn global_header_little_endian() {
+        let _ = env_logger::try_init();
+
         let raw = [
             0xa1u8, 0xb2, 0xc3, 0xd4u8, //magic number
-            0x04u8, //version major, 4
-            0x02u8, //version minor, 2
+            0x04u8, 0x00u8, //version major, 4
+            0x02u8, 0x00u8, //version minor, 2
+            0x00u8, 0x00u8, 0x00u8, 0x00u8, //zone, 0
+            0x04u8, 0x00u8, 0x00u8, 0x00u8, //sig figs, 4
+            0x13u8, 0x06u8, 0x00u8, 0x00u8, //snap length, 1555
+            0x02u8, 0x00u8, 0x00u8, 0x00u8, //network, 2
+        ];
+
+        let (rem, gh) = GlobalHeader::parse(&raw).expect("Failed to parse header");
+
+        assert!(rem.is_empty());
+        assert_eq!(gh.version_major(), 4);
+        assert_eq!(gh.version_minor(), 2);
+        assert_eq!(gh.endianness(), Endianness::Little)
+    }
+    #[test]
+    fn global_header_big_endian() {
+        let raw = [
+            0x4du8, 0x3c, 0x2b, 0x1au8, //magic number
+            0x00u8, 0x04u8, //version major, 4
+            0x00u8, 0x02u8, //version minor, 2
             0x00u8, 0x00u8, 0x00u8, 0x00u8, //zone, 0
             0x00u8, 0x00u8, 0x00u8, 0x04u8, //sig figs, 4
             0x00u8, 0x00u8, 0x06u8, 0x13u8, //snap length, 1555
             0x00u8, 0x00u8, 0x00u8, 0x02u8, //network, 2
         ];
 
-        let (rem, gh) = GlobalHeader::parse(raw).expect("Failed to parse header");
+        let (rem, gh) = GlobalHeader::parse(&raw).expect("Failed to parse header");
 
         assert!(rem.is_empty());
+        assert_eq!(gh.version_major(), 4);
+        assert_eq!(gh.version_minor(), 2);
         assert_eq!(gh.endianness(), Endianness::Big)
-    }
-    #[test]
-    fn test_global_header_little_endian() {
-        let raw = [
-            0xa1u8, 0xb2, 0xc3, 0xd4u8, //magic number
-            0x04u8, //version major, 4
-            0x02u8, //version minor, 2
-            0x00u8, 0x00u8, 0x00u8, 0x00u8, //zone, 0
-            0x00u8, 0x00u8, 0x00u8, 0x04u8, //sig figs, 4
-            0x00u8, 0x00u8, 0x06u8, 0x13u8, //snap length, 1555
-            0x00u8, 0x00u8, 0x00u8, 0x02u8, //network, 2
-        ].to_le();
-
-        let (rem, gh) = GlobalHeader::parse(raw).expect("Failed to parse header");
-
-        assert!(rem.is_empty());
-        assert_eq!(gh.endianness(), Endianness::Little)
     }
 }

@@ -59,10 +59,16 @@ impl<'a> Tcp<'a> {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
+    extern crate hex_slice;
+    use self::hex_slice::AsHex;
+
     use super::*;
 
     #[test]
     fn parse_tcp() {
+        let _ = env_logger::try_init();
+
         let raw = [
             0x80u8, //length, 8 words (32 bytes)
             0xC6u8, 0xB7u8, //src port, 50871
@@ -80,13 +86,20 @@ mod tests {
             0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
         ];
 
-        let (rem, l4) = Tcp::parse(raw, Endianness::BIG).expect("Unable to parse");
+        let (rem, l4) = Tcp::parse(&raw, Endianness::Big).expect("Unable to parse");
 
         assert!(rem.is_empty());
 
-        assert_eq!(l4.dst_port, 80);
-        assert_eq!(l4.src_port, 50871);
-        assert_eq!(l4.length, 32);
-        assert_eq!(l4.payload, b"01020304000000000000000000000000000000000000000000000000fcfdfeff");
+        assert_eq!(l4.dst_port(), 80);
+        assert_eq!(l4.src_port(), 50871);
+        assert_eq!(l4.length(), 32);
+        assert_eq!(l4.payload(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0xfcu8, 0xfdu8, 0xfeu8, 0xffu8], "Payload Mismatch: {:x}", l4.payload().as_hex());
     }
 }

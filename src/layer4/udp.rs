@@ -33,8 +33,10 @@ impl<'a> Udp<'a> {
             src_port: u16!(endianness) >>
             length: map!(u16!(endianness), |s| {
                 let l = s as usize;
+                debug!("Parsing udp with payload length {} less {}", l, HEADER_LENGTH);
                 l - HEADER_LENGTH
             }) >>
+            checksum: u16!(endianness) >>
             payload: take!(length) >>
 
             (
@@ -51,14 +53,21 @@ impl<'a> Udp<'a> {
 
 #[cfg(test)]
 mod tests {
+    extern crate env_logger;
+    extern crate hex_slice;
+    use self::hex_slice::AsHex;
+
     use super::*;
 
     #[test]
     fn parse_udp() {
+        let _ = env_logger::try_init();
+
         let raw = [
             0xC6u8, 0xB7u8, //dst port, 50871
             0x00u8, 0x50u8, //src port, 80
-            0x00u8, 0x40u8, //length 64, less header length is payload of 32
+            0x00u8, 0x28u8, //length 40, less header length is payload of 32
+            0x00u8, 0x00u8, //checksum
             0x01u8, 0x02u8, 0x03u8, 0x04u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
@@ -69,13 +78,20 @@ mod tests {
             0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 32 bytes
         ];
 
-        let (rem, l4) = Udp::parse(raw, Endianness::Big).expect("Unable to parse");
+        let (rem, l4) = Udp::parse(&raw, Endianness::Big).expect("Unable to parse");
 
         assert!(rem.is_empty());
 
-        assert_eq!(l4.dst_port, 50871);
-        assert_eq!(l4.src_port, 80);
-        assert_eq!(l4.length, 32);
-        assert_eq!(l4.payload, b"01020304000000000000000000000000000000000000000000000000fcfdfeff")
+        assert_eq!(l4.dst_port(), 50871);
+        assert_eq!(l4.src_port(), 80);
+        assert_eq!(l4.length(), 32);
+        assert_eq!(l4.payload(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0x00u8, 0x00u8, 0x00u8, 0x00u8,
+            0xfcu8, 0xfdu8, 0xfeu8, 0xffu8], "Payload Mismatch: {:x}", l4.payload().as_hex());
     }
 }
