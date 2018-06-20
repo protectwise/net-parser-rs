@@ -84,7 +84,7 @@ use nom::*;
 ///    let packet = CaptureParser::parse_ethernet_packet(packet_bytes).expect("Could not parse");
 ///```
 ///
-struct CaptureParser;
+pub struct CaptureParser;
 
 impl CaptureParser {
     pub fn parse_file<'a>(input: &'a [u8]) -> IResult<&[u8], (global_header::GlobalHeader, std::vec::Vec<record::PcapRecord<'a>>)> {
