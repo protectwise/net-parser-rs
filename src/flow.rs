@@ -105,7 +105,7 @@ impl<'a> Flow<'a> {
         }
     }
 
-    fn try_from(record: &'a PcapRecord<'a>) -> Result<Flow<'a>, errors::Error> {
+    pub fn try_from(record: &'a PcapRecord<'a>) -> Result<Flow<'a>, errors::Error> {
         let l2 = record.layer2();
         Flow::try_layer2(l2).map(move |i| {
             Flow {
