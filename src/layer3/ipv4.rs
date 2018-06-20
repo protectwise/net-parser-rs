@@ -104,6 +104,28 @@ impl<'a> IPv4<'a> {
             })
     }
 
+    pub fn new<'b>(
+        endianness: nom::Endianness,
+        dst_ip: std::net::IpAddr,
+        src_ip: std::net::IpAddr,
+        flags: u16,
+        ttl: u8,
+        protocol: u8,
+        layer4: Layer4<'a>
+    ) -> IPv4 {
+        IPv4 {
+            info: IPv4Info {
+                endianness,
+                dst_ip,
+                src_ip,
+                flags,
+                ttl,
+                protocol
+            },
+            layer4: layer4
+        }
+    }
+
     pub(crate) fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> IResult<&'b [u8], IPv4<'b>> {
         be_u8(input).and_then(|r| {
             let (rem, length_check) = r;

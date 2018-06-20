@@ -9,6 +9,9 @@ pub mod ipv6;
 pub mod lldp;
 pub mod payload;
 
+///
+/// Available layer 3 representations
+///
 pub enum Layer3<'a> {
     //Arp(apr::Arp<'a>),
     IPv4(ipv4::IPv4<'a>),

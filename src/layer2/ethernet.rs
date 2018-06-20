@@ -12,9 +12,6 @@ use std;
 const ETHERNET_PAYLOAD: u16 = 1500u16;
 const VLAN_LENGTH: usize = 4;
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct MacAddress(pub [u8; MAC_LENGTH]);
-
 pub enum Layer3Id {
     Lldp = 0x88cc,
     IPv4 = 0x0800,
@@ -60,6 +57,7 @@ impl VlanTag {
 }
 
 pub struct Ethernet<'a> {
+    endianness: Endianness,
     dst_mac: MacAddress,
     src_mac: MacAddress,
     ether_type: EthernetTypeId,
@@ -74,6 +72,7 @@ fn to_mac_address(i: &[u8]) -> MacAddress {
 named!(mac_address<&[u8], MacAddress>, map!(take!(MAC_LENGTH), to_mac_address));
 
 impl<'a> Ethernet<'a> {
+    pub fn endianness(&self) -> Endianness { self.endianness }
     pub fn dst_mac(&'a self) -> &'a MacAddress {
         &self.dst_mac
     }
@@ -170,6 +169,7 @@ impl<'a> Ethernet<'a> {
         l3.map(|r| {
             let (rem, layer3) = r;
             (rem, Ethernet {
+                endianness: endianness,
                 dst_mac: dst_mac,
                 src_mac: src_mac,
                 ether_type: not_vlan,
@@ -207,7 +207,25 @@ impl<'a> Ethernet<'a> {
         })
     }
 
-    pub(crate) fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], Ethernet<'b>> {
+    pub fn new<'b>(
+        endianness: Endianness,
+        dst_mac: MacAddress,
+        src_mac: MacAddress,
+        ether_type: EthernetTypeId,
+        vlans: std::vec::Vec<VlanTag>,
+        layer3: Layer3<'b>
+    ) -> Ethernet<'b> {
+        Ethernet {
+            endianness,
+            dst_mac,
+            src_mac,
+            ether_type,
+            vlans,
+            layer3
+        }
+    }
+
+    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], Ethernet<'b>> {
         let r = do_parse!(input,
             dst_mac: mac_address >>
             src_mac: mac_address >>

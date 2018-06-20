@@ -12,13 +12,13 @@ net-parser-rs="~0.1"
 ```rust
 extern crate net_parser_rs;
 
-use net_parser_rs::NetworkParser;
+use net_parser_rs::CaptureParser;
 use std::*;
 
-///Parse a file with global header
+//Parse a file with global header
 let file_bytes = include_bytes!("capture.pcap");
-let records = NetworkParser::parse_file(file_bytes).expect("Could not parse");
+let records = CaptureParser::parse_file(file_bytes).expect("Could not parse");
 
-///Parse a sequence of one or more packets
-let records = NetworkParser::parse(packet_bytes).expect("Could not parse");
+//Parse a sequence of one or more packets
+let records = CaptureParser::parse(packet_bytes).expect("Could not parse");
 ```

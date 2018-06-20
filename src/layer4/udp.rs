@@ -6,6 +6,7 @@ use std;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
 pub struct Udp<'a> {
+    endianness: Endianness,
     dst_port: u16,
     src_port: u16,
     length: usize,
@@ -13,6 +14,7 @@ pub struct Udp<'a> {
 }
 
 impl<'a> Udp<'a> {
+    pub fn endianness(&self) -> Endianness { self.endianness }
     pub fn dst_port(&self) -> u16 {
         self.dst_port
     }
@@ -24,6 +26,22 @@ impl<'a> Udp<'a> {
     }
     pub fn payload(&self) -> &[u8] {
         self.payload
+    }
+
+    pub fn new<'b>(
+        endianness: Endianness,
+        dst_port: u16,
+        src_port: u16,
+        length: usize,
+        payload: &'b [u8]
+    ) -> Udp<'b> {
+        Udp {
+            endianness,
+            dst_port,
+            src_port,
+            length,
+            payload
+        }
     }
 
     pub(crate) fn parse<'b>(input: &'b [u8], endianness: Endianness) -> IResult<&'b [u8], Udp<'b>> {
@@ -41,6 +59,7 @@ impl<'a> Udp<'a> {
 
             (
                 Udp {
+                    endianness: endianness,
                     dst_port: dst_port,
                     src_port: src_port,
                     length: length,
@@ -82,6 +101,7 @@ mod tests {
 
         assert!(rem.is_empty());
 
+        assert_eq!(l4.endianness(), Endianness::Big);
         assert_eq!(l4.dst_port(), 50871);
         assert_eq!(l4.src_port(), 80);
         assert_eq!(l4.length(), 32);

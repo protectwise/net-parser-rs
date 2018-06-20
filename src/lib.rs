@@ -1,5 +1,10 @@
 #![allow(unused)]
-#![feature(trace_macros)]
+#![feature(trace_macros, try_from)]
+///! net-parser-rs
+///!
+///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
+///! associated records.
+///!
 #[macro_use] pub extern crate arrayref;
 #[macro_use] pub extern crate error_chain;
 #[macro_use(debug, info, error, log)] pub extern crate log;
@@ -32,6 +37,9 @@ pub mod errors {
             InvalidIPv4Length(value: u8) {
                 display("Invalid IPv4 length {}", value)
             }
+            FlowConversion(why: String) {
+                display("Could not convert to flow {}", why)
+            }
             NotImplemented {
                 display("Not implemented yet")
             }
@@ -46,7 +54,7 @@ pub mod errors {
 }
 
 pub mod common;
-//pub mod flow;
+pub mod flow;
 pub mod global_header;
 pub mod layer2;
 pub mod layer3;
@@ -56,19 +64,30 @@ pub mod record;
 use errors::*;
 use nom::*;
 
-struct NetworkParser<'a> {
-    global_header: global_header::GlobalHeader,
-    records: std::vec::Vec<record::PcapRecord<'a>>
-}
+///
+/// Primary utility for parsing packet captures, either from file, bytes, or interfaces.
+///
+/// ```text
+///    extern crate net_parser_rs;
+///
+///    use net_parser_rs::NetworkParser;
+///    use std::*;
+///
+///    //Parse a file with global header and packet records
+///    let file_bytes = include_bytes!("capture.pcap");
+///    let records = CaptureParser::parse_file(file_bytes).expect("Could not parse");
+///
+///    //Parse a sequence of one or more packet records
+///    let records = CaptureParser::parse_records(record_bytes).expect("Could not parse");
+///
+///    //Parse a single ethernet packet
+///    let packet = CaptureParser::parse_ethernet_packet(packet_bytes).expect("Could not parse");
+///```
+///
+struct CaptureParser;
 
-impl<'a> NetworkParser<'a> {
-    pub fn global_header(&'a self) -> &'a global_header::GlobalHeader {
-        &self.global_header
-    }
-    pub fn records(&'a self) -> &'a std::vec::Vec<record::PcapRecord<'a>> {
-        &self.records
-    }
-    pub fn parse_file<'b>(input: &'b [u8]) -> IResult<&[u8], NetworkParser<'b>> {
+impl CaptureParser {
+    pub fn parse_file<'a>(input: &'a [u8]) -> IResult<&[u8], (global_header::GlobalHeader, std::vec::Vec<record::PcapRecord<'a>>)> {
         let header_res = global_header::GlobalHeader::parse(input);
 
         header_res.and_then(|r| {
@@ -76,21 +95,18 @@ impl<'a> NetworkParser<'a> {
 
             debug!("Global header version {}.{}, with endianness {:?}", header.version_major(), header.version_minor(), header.endianness());
 
-            NetworkParser::parse_records(rem, header.endianness()).map(|records_res| {
+            CaptureParser::parse_records(rem, header.endianness()).map(|records_res| {
                 let (records_rem, records) = records_res;
 
                 debug!("{} bytes left for record parsing", records_rem.len());
 
-                (records_rem, NetworkParser {
-                    global_header: header,
-                    records: records
-                })
+                (records_rem, (header, records))
             })
         })
     }
 
-    pub fn parse_records<'b>(input: &'b [u8], endianness: Endianness) -> IResult<&'b [u8], std::vec::Vec<record::PcapRecord<'b>>> {
-        let mut records: std::vec::Vec<record::PcapRecord<'b>> = vec![];
+    pub fn parse_records<'a>(input: &'a [u8], endianness: Endianness) -> IResult<&'a [u8], std::vec::Vec<record::PcapRecord<'a>>> {
+        let mut records: std::vec::Vec<record::PcapRecord<'a>> = vec![];
         let mut current = input;
 
         debug!("{} bytes left for record parsing", current.len());
@@ -115,6 +131,14 @@ impl<'a> NetworkParser<'a> {
         };
 
         Ok( (current, records) )
+    }
+
+    pub fn parse_record<'a>(input: &'a [u8], endianness: Endianness) -> IResult<&'a [u8], record::PcapRecord<'a>> {
+        record::PcapRecord::parse(input, endianness)
+    }
+
+    pub fn parse_ethernet_packet<'a>(input: &'a [u8], endianness: Endianness) -> IResult<&'a [u8], layer2::ethernet::Ethernet<'a>> {
+        layer2::ethernet::Ethernet::parse(input, endianness)
     }
 }
 
@@ -148,11 +172,11 @@ mod tests {
             0x01u8, 0x02u8, 0x03u8, 0x04u8
         ];
 
-        let (rem, f) = NetworkParser::parse_file(&raw).expect("Failed to parse");
+        let (rem, (header, records)) = CaptureParser::parse_file(&raw).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
-        assert_eq!(f.global_header().endianness(), Endianness::Big);
-        assert_eq!(f.records().len(), 1);
+        assert_eq!(header.endianness(), Endianness::Big);
+        assert_eq!(records.len(), 1);
     }
 }

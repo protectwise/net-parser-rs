@@ -4,6 +4,9 @@ use self::nom::*;
 
 const MAGIC_NUMBER: u32 = 0xa1b2c3d4u32;
 
+///
+/// Global header associated with libpcap capture files
+///
 pub struct GlobalHeader {
     endianness: Endianness,
     version_major: u16,

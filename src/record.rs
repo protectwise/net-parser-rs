@@ -5,6 +5,9 @@ use self::nom::*;
 
 use std;
 
+///
+/// Pcap record associated with a libpcap capture
+///
 pub struct PcapRecord<'a> {
     endianness: nom::Endianness,
     timestamp: std::time::SystemTime,
@@ -33,7 +36,23 @@ impl<'a> PcapRecord<'a> {
         std::time::UNIX_EPOCH + offset
     }
 
-    pub(crate) fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], PcapRecord<'b>> {
+    pub fn new<'b>(
+        endianness: nom::Endianness,
+        timestamp: std::time::SystemTime,
+        actual_length: u32,
+        original_length: u32,
+        record: Layer2<'b>
+    ) -> PcapRecord<'b> {
+        PcapRecord {
+            endianness,
+            timestamp,
+            actual_length,
+            original_length,
+            record
+        }
+    }
+
+    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], PcapRecord<'b>> {
         let res = do_parse!(input,
 
             ts_seconds: u32!(endianness) >>
