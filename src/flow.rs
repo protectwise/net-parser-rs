@@ -126,11 +126,69 @@ impl<'a> Flow<'a> {
     }
 }
 
+impl<'a> std::fmt::Display for Device<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Mac={}   Ip={}   Port={}",
+            self.mac,
+            self.ip,
+            self.port
+        )
+    }
+}
+
+impl<'a> std::fmt::Display for Flow<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.timestamp.duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| {
+                std::fmt::Error
+            })
+            .and_then(|d| {
+            write!(f, "Source=[{}]   Destination=[{}]   Vlan={}   Timestamp={}{}",
+                   self.source,
+                   self.destination,
+                   self.vlan,
+                   d.as_secs(),
+                   d.subsec_millis()
+            )
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use super::super::{layer2, layer3, layer4};
 
+    #[test]
+    fn format_device() {
+        let dev = Device {
+            ip: &std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 1, 2, 3)),
+            mac: &MacAddress([0u8, 1u8, 2u8, 3u8, 4u8, 5u8]),
+            port: 80
+        };
+
+        assert_eq!(format!("{}", dev), "Mac=00:01:02:03:04:05   Ip=0.1.2.3   Port=80".to_string());
+    }
+
+    #[test]
+    fn format_flow() {
+        let flow = Flow {
+            source: Device {
+                ip: &std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 1, 2, 3)),
+                mac: &MacAddress([0u8, 1u8, 2u8, 3u8, 4u8, 5u8]),
+                port: 80
+            },
+            destination: Device {
+                ip: &std::net::IpAddr::V4(std::net::Ipv4Addr::new(100, 99, 98, 97)),
+                mac: &MacAddress([11u8, 10u8, 9u8, 8u8, 7u8, 6u8]),
+                port: 52436
+            },
+            vlan: 0,
+            timestamp: &std::time::UNIX_EPOCH
+        };
+
+        assert_eq!(format!("{}", flow), "Source=[Mac=00:01:02:03:04:05   Ip=0.1.2.3   Port=80]   Destination=[Mac=0b:0a:09:08:07:06   Ip=100.99.98.97   Port=52436]   Vlan=0   Timestamp=00")
+    }
     #[test]
     fn extract_flow_from_tcp() {
         let endianness = nom::Endianness::Big;
@@ -174,6 +232,8 @@ mod tests {
         );
 
         let flow = Flow::try_from(&record).expect("Could not extract flow");
+
+        info!("Flow: {}", flow);
 
         assert_eq!(flow.source().port(), 5000);
         assert_eq!(*flow.source().ip(), std::net::IpAddr::V4(std::net::Ipv4Addr::new(4, 5, 6, 7)));

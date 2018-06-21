@@ -82,11 +82,49 @@ impl<'a> PcapRecord<'a> {
     }
 }
 
+impl<'a> std::fmt::Display for PcapRecord<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.timestamp.duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| {
+                std::fmt::Error
+            })
+            .and_then(|d| {
+                write!(f, "Timestamp={}{}   Length={}   Original Length={}",
+                       d.as_secs(),
+                       d.subsec_millis(),
+                       self.actual_length,
+                       self.original_length
+                )
+            })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate env_logger;
 
     use super::*;
+
+    #[test]
+    fn display_record() {
+        let _ = env_logger::try_init();
+
+        let data = [
+            0x5Bu8, 0x11u8, 0x6Du8, 0xE3u8, //seconds, 1527868899
+            0x00u8, 0x02u8, 0x51u8, 0xF5u8, //microseconds, 152053
+            0x00u8, 0x00u8, 0x00u8, 0x12u8, //actual length, 18
+            0x00u8, 0x00u8, 0x04u8, 0xD0u8, //original length, 1232
+            //ethernet
+            0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
+            0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
+            0x00u8, 0x04u8, //payload ethernet
+            0x01u8, 0x02u8, 0x03u8, 0x04u8
+        ];
+
+        let record = PcapRecord::parse(&data, nom::Endianness::Big).expect("Could not parse").1;
+
+        assert_eq!(format!("{}", record), "Timestamp=1527868899152   Length=18   Original Length=1232");
+    }
 
     #[test]
     fn convert_timestamp() {
