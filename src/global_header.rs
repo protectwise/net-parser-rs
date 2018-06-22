@@ -4,6 +4,11 @@ use self::nom::*;
 
 const MAGIC_NUMBER: u32 = 0xa1b2c3d4u32;
 
+#[cfg(target_endian = "little")]
+const NATIVE_ENDIAN: Endianness = Endianness::Little;
+#[cfg(target_endian = "big")]
+const NATIVE_ENDIAN: Endianness = Endianness::Big;
+
 ///
 /// Global header associated with libpcap capture files
 ///
@@ -31,11 +36,12 @@ impl GlobalHeader {
     pub(crate) fn parse<'a>(input: &'a [u8]) -> IResult<&'a [u8], GlobalHeader> {
         do_parse!(input,
 
-            endianness: map!(be_u32, |e| {
+            endianness: map!(u32!(NATIVE_ENDIAN), |e| {
                 debug!("Read {} compared to magic number {}", e, MAGIC_NUMBER);
                 match e {
-                    MAGIC_NUMBER => Endianness::Little,
-                    _ => Endianness::Big
+                    MAGIC_NUMBER => NATIVE_ENDIAN,
+                    _ if NATIVE_ENDIAN == Endianness::Little => Endianness::Big,
+                    _ => Endianness::Little
                 }
             }) >>
             version_major: u16!(endianness) >>

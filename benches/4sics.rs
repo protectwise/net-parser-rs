@@ -12,7 +12,7 @@ fn pcap_path() -> PathBuf {
 }
 
 fn parse_flow(input: &[u8]) {
-    let mut records = net_parser_rs::CaptureParser::parse_file(input).expect("Failed to parse");
+    let (_, (_, mut records)) = net_parser_rs::CaptureParser::parse_file(input).expect("Failed to parse");
     let records_count = records.len();
 
     assert!(records_count > 0);
@@ -37,7 +37,7 @@ fn benchmark_parse_flow(c: &mut Criterion) {
 }
 
 fn parse_pcap(input: &[u8]) {
-    let records = net_parser_rs::CaptureParser::parse_file(input).expect("Failed to parse");
+    let (_, (_, records)) = net_parser_rs::CaptureParser::parse_file(input).expect("Failed to parse");
     assert!(records.len() > 0);
 }
 

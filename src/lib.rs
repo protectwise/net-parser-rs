@@ -7,7 +7,7 @@
 ///!
 #[macro_use] pub extern crate arrayref;
 #[macro_use] pub extern crate error_chain;
-#[macro_use(debug, info, error, log)] pub extern crate log;
+#[macro_use(debug, info, error, log, trace)] pub extern crate log;
 #[macro_use] pub extern crate nom;
 
 pub mod prelude {
@@ -135,7 +135,7 @@ impl CaptureParser {
             CaptureParser::parse_records(rem, header.endianness()).map(|records_res| {
                 let (records_rem, records) = records_res;
 
-                debug!("{} bytes left for record parsing", records_rem.len());
+                trace!("{} bytes left for record parsing", records_rem.len());
 
                 (records_rem, (header, records))
             })
@@ -146,13 +146,13 @@ impl CaptureParser {
         let mut records: std::vec::Vec<record::PcapRecord> = vec![];
         let mut current = input;
 
-        debug!("{} bytes left for record parsing", current.len());
+        trace!("{} bytes left for record parsing", current.len());
 
         loop {
             match record::PcapRecord::parse(current, endianness) {
                 Ok( (rem, r) ) => {
                     current = rem;
-                    debug!("{} bytes left for record parsing", current.len());
+                    trace!("{} bytes left for record parsing", current.len());
                     records.push(r);
                 }
                 Err(nom::Err::Incomplete(nom::Needed::Size(s))) => {
@@ -258,6 +258,8 @@ mod tests {
 
     #[test]
     fn file_parse() {
+        let _ = env_logger::try_init();
+
         let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
 
         let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
@@ -266,8 +268,7 @@ mod tests {
 
         let (rem, (header, records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
 
-        assert!(rem.is_empty());
-        assert_eq!(header.endianness(), Endianness::Big);
+        assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
     }
 }
