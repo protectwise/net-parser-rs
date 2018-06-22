@@ -1,5 +1,6 @@
 # Network Packet Parser (net-parser-rs)
-Basic network parser leveraging Rust and [nom](https://github.com/Geal/nom) for safe and efficient packet parsing.
+Basic network parser leveraging Rust and [nom](https://github.com/Geal/nom) for safe and efficient packet parsing. Design
+influenced by [pktparse-rs](https://github.com/moosingin3space/pktparse-rs/tree/master/src) and 
 
 ## Getting Started
 Add net-parser-rs to your dependencies
