@@ -37,6 +37,7 @@ impl PcapRecord {
         self.original_length
     }
     pub fn payload(&self) -> &std::vec::Vec<u8> { &self.payload }
+    pub unsafe fn packet_data(&mut self) -> *mut u8 { self.payload.as_mut_ptr() }
 
     ///
     /// Convert a packet time (seconds and partial second microseconds) to a system time (offset from epoch)

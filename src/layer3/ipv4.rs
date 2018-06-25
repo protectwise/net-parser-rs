@@ -240,7 +240,7 @@ mod tests {
     fn convert_ipv4() {
         let _ = env_logger::try_init();
 
-        let (rem, l3) = IPv4::parse(RAW_DATA, Endianness::Big).expect("Unable to parse");
+        let (rem, l3) = IPv4::parse(RAW_DATA, Endianness::Little).expect("Unable to parse");
 
         let info = Layer3FlowInfo::try_from(l3).expect("Could not convert to layer 3 info");
 

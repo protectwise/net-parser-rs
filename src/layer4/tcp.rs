@@ -144,7 +144,7 @@ mod tests {
     fn convert_tcp() {
         let _ = env_logger::try_init();
 
-        let (rem, l4) = Tcp::parse(RAW_DATA, Endianness::Big).expect("Unable to parse");
+        let (rem, l4) = Tcp::parse(RAW_DATA, Endianness::Little).expect("Unable to parse");
 
         assert!(rem.is_empty());
 

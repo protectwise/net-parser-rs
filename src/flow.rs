@@ -27,6 +27,7 @@ impl Flow {
     pub fn destination(&self) -> &Device { &self.destination }
     pub fn vlan(&self) -> Vlan { self.vlan }
     pub fn record(&self) -> &PcapRecord { &self.record }
+    pub unsafe fn packet_data(&mut self) -> *mut u8 { self.record.packet_data() }
 }
 
 impl std::fmt::Display for Device {

@@ -338,7 +338,7 @@ mod tests {
     fn convert_ethernet_tcp() {
         let _ = env_logger::try_init();
 
-        let (rem, l2) = Ethernet::parse(TCP_RAW_DATA, Endianness::Big).expect("Could not parse");
+        let (rem, l2) = Ethernet::parse(TCP_RAW_DATA, Endianness::Little).expect("Could not parse");
 
         assert!(rem.is_empty());
 

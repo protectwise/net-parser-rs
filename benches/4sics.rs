@@ -2,10 +2,20 @@
 #[macro_use] extern crate criterion;
 extern crate net_parser_rs;
 
-use criterion::Criterion;
+use criterion::{Benchmark, Criterion};
 use net_parser_rs::convert::*;
 use std::io::prelude::*;
 use std::path::PathBuf;
+
+const SAMPLE_SIZE: usize = 10;
+const RESAMPLES: usize = 10;
+const MEASUREMENT_TIME: std::time::Duration = std::time::Duration::from_millis(100);
+
+fn configure_benchmark(bench: Benchmark) -> Benchmark {
+    bench.sample_size(SAMPLE_SIZE)
+        .measurement_time(MEASUREMENT_TIME)
+        .nresamples(RESAMPLES)
+}
 
 fn pcap_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap")
@@ -23,11 +33,17 @@ fn parse_flow(input: &[u8]) {
 }
 
 fn benchmark_parse_flow(c: &mut Criterion) {
-    let pcap_reader = std::fs::File::open(pcap_path()).unwrap();
+    let id = "parse_with_flow";
 
-    let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+    let b = Benchmark::new(id, |b| {
+        let pcap_reader = std::fs::File::open(pcap_path()).unwrap();
 
-    c.bench_function("parse with flow", move |b| b.iter(|| parse_flow(&bytes)));
+        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+
+        b.iter(move || parse_flow(&bytes))
+    });
+
+    c.bench(id, configure_benchmark(b));
 }
 
 fn parse_pcap(input: &[u8]) {
@@ -36,11 +52,17 @@ fn parse_pcap(input: &[u8]) {
 }
 
 fn benchmark_parse_pcap(c: &mut Criterion) {
-    let pcap_reader = std::fs::File::open(pcap_path()).unwrap();
+    let id = "parse";
 
-    let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+    let b = Benchmark::new(id, |b| {
+        let pcap_reader = std::fs::File::open(pcap_path()).unwrap();
 
-    c.bench_function("parse", move |b| b.iter(|| parse_pcap(&bytes)));
+        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+
+        b.iter(move || parse_pcap(&bytes))
+    });
+
+    c.bench(id, configure_benchmark(b));
 }
 
 criterion_group!(benches, benchmark_parse_pcap, benchmark_parse_flow);
