@@ -61,10 +61,10 @@ impl Tcp {
     pub fn parse(input: &[u8], endianness: Endianness) -> IResult<&[u8], Tcp> {
         do_parse!(input,
             length: map!(be_u8, |s| Tcp::extract_length(s)) >>
-            src_port: u16!(endianness) >>
-            dst_port: u16!(endianness) >>
-            sequence_number: u32!(endianness) >>
-            acknowledgement_number: u32!(endianness) >>
+            src_port: be_u16 >>
+            dst_port: be_u16 >>
+            sequence_number: be_u32 >>
+            acknowledgement_number: be_u32 >>
             flags: u16!(endianness) >>
             payload: take!(length) >>
             (

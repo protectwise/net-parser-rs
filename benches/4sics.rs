@@ -17,15 +17,9 @@ fn parse_flow(input: &[u8]) {
 
     assert!(records_count > 0);
 
-    let mut flow_count = 0;
+    let flows = PcapRecord::convert_records(records, true).expect("Failed to convert");
 
-    while let Some(record) = records.pop() {
-        if let Ok(_) = Flow::try_from(record) {
-            flow_count += 1;
-        }
-    };
-
-    assert!(flow_count > 0);
+    assert!(flows.len() > 0);
 }
 
 fn benchmark_parse_flow(c: &mut Criterion) {

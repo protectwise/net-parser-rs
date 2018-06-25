@@ -14,6 +14,9 @@ use super::Layer2FlowInfo;
 const ETHERNET_PAYLOAD: u16 = 1500u16;
 const VLAN_LENGTH: usize = 4;
 
+///
+/// List of valid ethernet types that aren't payload or vlan. https://en.wikipedia.org/wiki/EtherType
+///
 #[derive(Clone, Debug, PartialEq)]
 pub enum Layer3Id {
     Lldp,
@@ -45,7 +48,11 @@ impl EthernetTypeId {
             0x86ddu16 => Some(EthernetTypeId::L3(Layer3Id::IPv6)),
             0x0806u16 => Some(EthernetTypeId::L3(Layer3Id::Arp)),
             x if x <= ETHERNET_PAYLOAD => Some(EthernetTypeId::PayloadLength(x)),
-            x => None
+            x => {
+                //TODO: change to warn once list is more complete
+                debug!("Encountered {:02x} when parsing Ethernet type", vlan);
+                None
+            }
         }
     }
 }
@@ -135,7 +142,7 @@ impl Ethernet {
     ) -> nom::IResult<&[u8], Ethernet> {
         let vlan_res = do_parse!(input,
 
-            vlan: map_opt!(u16!(endianness), EthernetTypeId::new) >>
+            vlan: map_opt!(be_u16, EthernetTypeId::new) >>
 
             (vlan)
         );
@@ -147,15 +154,20 @@ impl Ethernet {
                     Ethernet::parse_with_existing_vlan_tag(rem, endianness, dst_mac, src_mac, vlan_type_id, agg)
                 }
                 not_vlan => {
-                    Ok(
-                        (&[0u8; 0], Ethernet {
-                            endianness: endianness,
-                            dst_mac: dst_mac,
-                            src_mac: src_mac,
-                            ether_type: not_vlan,
-                            vlans: agg,
-                            payload: rem.into()
-                        })
+                    do_parse!(rem,
+
+                        payload: rest >>
+
+                        (
+                            Ethernet {
+                                endianness: endianness,
+                                dst_mac: dst_mac,
+                                src_mac: src_mac,
+                                ether_type: not_vlan,
+                                vlans: agg,
+                                payload: payload.into()
+                            }
+                        )
                     )
                 }
             }
@@ -200,13 +212,14 @@ impl TryFrom<Ethernet> for Layer2FlowInfo {
 
     fn try_from(value: Ethernet) -> Result<Self, Self::Error> {
         let ether_type = value.ether_type;
+        debug!("Creating from from layer 3 type {:?}", ether_type);
         let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
             match l3_id {
                 Layer3Id::IPv4 => {
                     layer3::ipv4::IPv4::parse(&value.payload, value.endianness)
                         .map_err(|e| {
                             let err: Self::Error = e.into();
-                            err
+                            err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                         }).and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {

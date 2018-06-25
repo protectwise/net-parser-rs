@@ -13,8 +13,12 @@ use std::convert::TryFrom;
 const ADDRESS_LENGTH: usize = 4;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
+///
+/// IP Protocol numbers https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
+///
 #[derive(Clone, Debug, PartialEq)]
 pub enum Layer4Id {
+    //ICMP,
     Tcp,
     Udp
 }
@@ -22,9 +26,14 @@ pub enum Layer4Id {
 impl Layer4Id {
     fn new(value: u8) -> Option<Layer4Id> {
         match value {
+            //1 -> Some(Layer4Id::ICMP)
             6 => Some(Layer4Id::Tcp),
             17 => Some(Layer4Id::Udp),
-            _ => None
+            _ => {
+                //TODO: change to warn once list is more complete
+                debug!("Encountered {:02x} when parsing layer 4 id", value);
+                None
+            }
         }
     }
 }
@@ -41,7 +50,6 @@ pub struct IPv4 {
 
 fn to_ip_address(i: &[u8]) -> std::net::IpAddr {
     let ipv4 = std::net::Ipv4Addr::from(array_ref![i, 0, ADDRESS_LENGTH].clone());
-    debug!("Parsed {:?} as {}", i, ipv4);
     std::net::IpAddr::V4(ipv4)
 }
 
@@ -68,15 +76,14 @@ impl IPv4 {
         do_parse!(input,
 
             tos: be_u8 >>
-            length: map!(u16!(endianness), |s| {
-                debug!("Parsing ipv4 with payload length {} less {}", s, header_length);
+            length: map!(be_u16, |s| {
                 s - (header_length as u16)
             }) >>
-            id: u16!(endianness) >>
-            flags: u16!(endianness) >>
+            id: be_u16 >>
+            flags: be_u16 >>
             ttl: be_u8 >>
             proto: map_opt!(be_u8, Layer4Id::new) >>
-            checksum: u16!(endianness) >>
+            checksum: be_u16 >>
             src_ip: ip_address >>
             dst_ip: ip_address >>
             payload: take!(length) >>
@@ -132,12 +139,13 @@ impl TryFrom<IPv4> for Layer3FlowInfo {
     type Error = errors::Error;
 
     fn try_from(value: IPv4) -> Result<Self, Self::Error> {
+        debug!("Creating flow info from {:?}", value.protocol);
         let l4 = match value.protocol.clone() {
             Layer4Id::Tcp => {
                 layer4::tcp::Tcp::parse(value.payload(), value.endianness)
                     .map_err(|e| {
                         let err: Self::Error = e.into();
-                        err
+                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                     }).and_then(|r| {
                     let (rem, l4) = r;
                     if rem.is_empty() {
@@ -151,7 +159,7 @@ impl TryFrom<IPv4> for Layer3FlowInfo {
                 layer4::udp::Udp::parse(value.payload(), value.endianness)
                     .map_err(|e| {
                         let err: Self::Error = e.into();
-                        err
+                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                     }).and_then(|r| {
                     let (rem, l4) = r;
                     if rem.is_empty() {

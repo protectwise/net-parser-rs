@@ -1,5 +1,6 @@
 #![allow(unused)]
 #![feature(trace_macros, try_from)]
+#![recursion_limit="128"]
 ///! net-parser-rs
 ///!
 ///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
@@ -7,7 +8,7 @@
 ///!
 #[macro_use] pub extern crate arrayref;
 #[macro_use] pub extern crate error_chain;
-#[macro_use(debug, info, error, log, trace)] pub extern crate log;
+#[macro_use(debug, info, error, log, trace, warn)] pub extern crate log;
 #[macro_use] pub extern crate nom;
 
 pub mod prelude {
@@ -37,6 +38,9 @@ pub mod errors {
             Utf8(std::str::Utf8Error) #[doc = "Error during UTF8 conversion"];
         }
         errors {
+            FlowParse {
+                display("Parsing failure when converting to flow")
+            }
             NomIncomplete(needed: String) {
                 display("Not enough data to parse, needed {}", needed)
             }
@@ -124,6 +128,9 @@ use nom::*;
 pub struct CaptureParser;
 
 impl CaptureParser {
+    ///
+    /// Parse a slice of bytes that start with libpcap file format header (https://wiki.wireshark.org/Development/LibpcapFileFormat)
+    ///
     pub fn parse_file(input: &[u8]) -> IResult<&[u8], (global_header::GlobalHeader, std::vec::Vec<record::PcapRecord>)> {
         let header_res = global_header::GlobalHeader::parse(input);
 
@@ -142,6 +149,11 @@ impl CaptureParser {
         })
     }
 
+    ///
+    /// Parse a slice of bytes that correspond to a set of records, without libcap file format
+    /// header (https://wiki.wireshark.org/Development/LibpcapFileFormat). Endianness of the byte
+    /// slice must be known.
+    ///
     pub fn parse_records(input: &[u8], endianness: Endianness) -> IResult<&[u8], std::vec::Vec<record::PcapRecord>> {
         let mut records: std::vec::Vec<record::PcapRecord> = vec![];
         let mut current = input;
@@ -170,6 +182,9 @@ impl CaptureParser {
         Ok( (current, records) )
     }
 
+    ///
+    /// Parse a slice of bytes as a single record. Endianness must be known.
+    ///
     pub fn parse_record(input: &[u8], endianness: Endianness) -> IResult<&[u8], record::PcapRecord> {
         record::PcapRecord::parse(input, endianness)
     }
@@ -270,5 +285,25 @@ mod tests {
 
         assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
+    }
+
+    #[test]
+    fn file_convert() {
+        let _ = env_logger::try_init();
+
+        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
+
+        let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
+
+        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+
+        let (rem, (header, mut records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+
+        assert_eq!(header.endianness(), Endianness::Little);
+        assert_eq!(records.len(), 246137);
+
+        let flows = PcapRecord::convert_records(records, true).expect("Failed to convert to flows");
+
+        assert_eq!(flows.len(), 27555);
     }
 }

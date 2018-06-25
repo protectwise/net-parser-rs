@@ -26,7 +26,7 @@ impl Flow {
     pub fn source(&self) -> &Device { &self.source }
     pub fn destination(&self) -> &Device { &self.destination }
     pub fn vlan(&self) -> Vlan { self.vlan }
-    pub fn timestamp(&self) -> &std::time::SystemTime { self.record.timestamp() }
+    pub fn record(&self) -> &PcapRecord { &self.record }
 }
 
 impl std::fmt::Display for Device {

@@ -43,12 +43,10 @@ impl Udp {
     pub fn parse(input: &[u8], endianness: Endianness) -> IResult<&[u8], Udp> {
         do_parse!(input,
 
-            dst_port: u16!(endianness) >>
-            src_port: u16!(endianness) >>
-            length: map!(u16!(endianness), |s| {
-                let l = s as usize;
-                debug!("Parsing udp with payload length {} less {}", l, HEADER_LENGTH);
-                l - HEADER_LENGTH
+            dst_port: be_u16 >>
+            src_port: be_u16 >>
+            length: map!(be_u16, |s| {
+                (s as usize) - HEADER_LENGTH
             }) >>
             checksum: u16!(endianness) >>
             payload: take!(length) >>

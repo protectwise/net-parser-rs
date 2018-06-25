@@ -38,9 +38,37 @@ impl PcapRecord {
     }
     pub fn payload(&self) -> &std::vec::Vec<u8> { &self.payload }
 
+    ///
+    /// Convert a packet time (seconds and partial second microseconds) to a system time (offset from epoch)
+    ///
     pub fn convert_packet_time(ts_seconds: u32, ts_microseconds: u32) -> std::time::SystemTime {
         let offset = std::time::Duration::from_secs(ts_seconds as u64) + std::time::Duration::from_micros(ts_microseconds as u64);
         std::time::UNIX_EPOCH + offset
+    }
+
+    ///
+    /// Utility function to convert a vector of records to flows, unless an error is encountered in flow conversion
+    ///
+    pub fn convert_records(mut records: std::vec::Vec<PcapRecord>, ignore_error: bool) -> Result<std::vec::Vec<flow::Flow>, errors::Error> {
+        let mut result = vec![];
+        result.reserve_exact(records.len());
+
+        while let Some(record) = records.pop() {
+            match Flow::try_from(record) {
+                Ok(f) => {
+                    result.push(f)
+                },
+                Err(e) => {
+                    if ignore_error {
+                        debug!("Failed to extract flow: {}", e);
+                    } else {
+                        return Err(e)
+                    }
+                }
+            }
+        };
+
+        Ok(result)
     }
 
     pub fn new(
