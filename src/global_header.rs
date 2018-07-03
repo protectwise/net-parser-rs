@@ -4,9 +4,9 @@ use self::nom::*;
 
 const MAGIC_NUMBER: u32 = 0xA1B2C3D4u32;
 #[cfg(target_endian = "little")]
-const NATIVE_ENDIAN: Endianness = Endianness::Little;
+pub const NATIVE_ENDIAN: Endianness = Endianness::Little;
 #[cfg(target_endian = "big")]
-const NATIVE_ENDIAN: Endianness = Endianness::Big;
+pub const NATIVE_ENDIAN: Endianness = Endianness::Big;
 
 ///
 /// Global header associated with libpcap capture files

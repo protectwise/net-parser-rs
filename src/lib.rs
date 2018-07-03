@@ -1,5 +1,5 @@
 #![allow(unused)]
-#![feature(trace_macros, try_from)]
+#![feature(trace_macros, try_from, test)]
 #![recursion_limit="128"]
 ///! net-parser-rs
 ///!
@@ -56,8 +56,11 @@ pub mod errors {
             IPv4Length(value: u8) {
                 display("Invalid IPv4 length {}", value)
             }
-            IPv4Type(value: layer3::ipv4::Layer4Id) {
+            IPv4Type(value: layer3::InternetProtocolId) {
                 display("Invalid ipv4 type {:?}", value)
+            }
+            IPv6Type(value: layer3::InternetProtocolId) {
+                display("Invalid ipv6 type {:?}", value)
             }
             FlowConversion(why: String) {
                 display("Could not convert to flow {}", why)
@@ -193,11 +196,13 @@ impl CaptureParser {
 #[cfg(test)]
 mod tests {
     extern crate env_logger;
+    extern crate test;
 
     use super::*;
     use super::convert::*;
     use std::io::prelude::*;
     use std::path::PathBuf;
+    use self::test::Bencher;
 
     const RAW_DATA: &'static [u8] = &[
         0x4du8, 0x3c, 0x2b, 0x1au8, //magic number
@@ -305,5 +310,45 @@ mod tests {
         let flows = PcapRecord::convert_records(records, true).expect("Failed to convert to flows");
 
         assert_eq!(flows.len(), 27555);
+    }
+
+    #[bench]
+    fn bench_parse(b: &mut Bencher) {
+        let _ = env_logger::try_init();
+
+        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
+
+        let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
+
+        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+
+        b.iter(|| {
+            let (rem, (header, records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+
+            assert_eq!(header.endianness(), Endianness::Little);
+            assert_eq!(records.len(), 246137);
+        });
+    }
+
+    #[bench]
+    fn bench_parse_convert(b: &mut Bencher) {
+        let _ = env_logger::try_init();
+
+        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
+
+        let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
+
+        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+
+        b.iter(|| {
+            let (rem, (header, mut records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+
+            assert_eq!(header.endianness(), Endianness::Little);
+            assert_eq!(records.len(), 246137);
+
+            let flows = PcapRecord::convert_records(records, true).expect("Failed to convert to flows");
+
+            assert_eq!(flows.len(), 27555);
+        });
     }
 }

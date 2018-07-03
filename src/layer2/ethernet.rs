@@ -69,7 +69,6 @@ impl VlanTag {
 }
 
 pub struct Ethernet {
-    endianness: Endianness,
     dst_mac: MacAddress,
     src_mac: MacAddress,
     ether_type: EthernetTypeId,
@@ -84,7 +83,6 @@ fn to_mac_address(i: &[u8]) -> MacAddress {
 named!(mac_address<&[u8], MacAddress>, map!(take!(MAC_LENGTH), to_mac_address));
 
 impl Ethernet {
-    pub fn endianness(&self) -> &Endianness { &self.endianness }
     pub fn dst_mac(&self) -> &MacAddress {
         &self.dst_mac
     }
@@ -116,7 +114,6 @@ impl Ethernet {
 
     fn parse_with_existing_vlan_tag<'b>(
         input: &'b [u8],
-        endianness: nom::Endianness,
         dst_mac: MacAddress,
         src_mac: MacAddress,
         vlan_type: VlanTypeId,
@@ -129,13 +126,12 @@ impl Ethernet {
                 vlan_type: vlan_type,
                 value: array_ref!(vlan, 0, VLAN_LENGTH).clone()
             });
-            Ethernet::parse_vlan_tag(rem, endianness, dst_mac, src_mac, agg_mut)
+            Ethernet::parse_vlan_tag(rem, dst_mac, src_mac, agg_mut)
         })
     }
 
     fn parse_vlan_tag(
         input: &[u8],
-        endianness: nom::Endianness,
         dst_mac: MacAddress,
         src_mac: MacAddress,
         agg: std::vec::Vec<VlanTag>
@@ -151,7 +147,7 @@ impl Ethernet {
             let (rem, vlan) = r;
             match vlan {
                 EthernetTypeId::Vlan(vlan_type_id) => {
-                    Ethernet::parse_with_existing_vlan_tag(rem, endianness, dst_mac, src_mac, vlan_type_id, agg)
+                    Ethernet::parse_with_existing_vlan_tag(rem, dst_mac, src_mac, vlan_type_id, agg)
                 }
                 not_vlan => {
                     do_parse!(rem,
@@ -160,7 +156,6 @@ impl Ethernet {
 
                         (
                             Ethernet {
-                                endianness: endianness,
                                 dst_mac: dst_mac,
                                 src_mac: src_mac,
                                 ether_type: not_vlan,
@@ -175,7 +170,6 @@ impl Ethernet {
     }
 
     pub fn new(
-        endianness: Endianness,
         dst_mac: MacAddress,
         src_mac: MacAddress,
         ether_type: EthernetTypeId,
@@ -183,7 +177,6 @@ impl Ethernet {
         payload: std::vec::Vec<u8>
     ) -> Ethernet {
         Ethernet {
-            endianness,
             dst_mac,
             src_mac,
             ether_type,
@@ -192,7 +185,7 @@ impl Ethernet {
         }
     }
 
-    pub fn parse(input: &[u8], endianness: nom::Endianness) -> nom::IResult<&[u8], Ethernet> {
+    pub fn parse(input: &[u8]) -> nom::IResult<&[u8], Ethernet> {
         let r = do_parse!(input,
             dst_mac: mac_address >>
             src_mac: mac_address >>
@@ -202,7 +195,7 @@ impl Ethernet {
 
         r.and_then(|res| {
             let (rem, (dst_mac, src_mac)) = res;
-            Ethernet::parse_vlan_tag(rem, endianness, dst_mac, src_mac, vec![])
+            Ethernet::parse_vlan_tag(rem, dst_mac, src_mac, vec![])
         })
     }
 }
@@ -216,7 +209,21 @@ impl TryFrom<Ethernet> for Layer2FlowInfo {
         let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
             match l3_id {
                 Layer3Id::IPv4 => {
-                    layer3::ipv4::IPv4::parse(&value.payload, value.endianness)
+                    layer3::ipv4::IPv4::parse(&value.payload)
+                        .map_err(|e| {
+                            let err: Self::Error = e.into();
+                            err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                        }).and_then(|r| {
+                        let (rem, l3) = r;
+                        if rem.is_empty() {
+                            Layer3FlowInfo::try_from(l3)
+                        } else {
+                            Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                        }
+                    })
+                }
+                Layer3Id::IPv6 => {
+                    layer3::ipv6::IPv6::parse(&value.payload)
                         .map_err(|e| {
                             let err: Self::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
@@ -298,7 +305,7 @@ mod tests {
     fn parse_ethernet_payload() {
         let _ = env_logger::try_init();
 
-        let (rem, l2) = Ethernet::parse(PAYLOAD_RAW_DATA, Endianness::Big).expect("Could not parse");
+        let (rem, l2) = Ethernet::parse(PAYLOAD_RAW_DATA).expect("Could not parse");
 
         assert!(rem.is_empty());
         assert_eq!(l2.dst_mac().0, [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]);
@@ -318,7 +325,7 @@ mod tests {
     fn parse_ethernet_tcp() {
         let _ = env_logger::try_init();
 
-        let (rem, l2) = Ethernet::parse(TCP_RAW_DATA, Endianness::Big).expect("Could not parse");
+        let (rem, l2) = Ethernet::parse(TCP_RAW_DATA).expect("Could not parse");
 
         assert!(rem.is_empty());
         assert_eq!(l2.dst_mac().0, [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]);
@@ -338,7 +345,7 @@ mod tests {
     fn convert_ethernet_tcp() {
         let _ = env_logger::try_init();
 
-        let (rem, l2) = Ethernet::parse(TCP_RAW_DATA, Endianness::Little).expect("Could not parse");
+        let (rem, l2) = Ethernet::parse(TCP_RAW_DATA).expect("Could not parse");
 
         assert!(rem.is_empty());
 

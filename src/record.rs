@@ -18,7 +18,6 @@ use std::convert::TryFrom;
 /// Pcap record associated with a libpcap capture
 ///
 pub struct PcapRecord{
-    endianness: nom::Endianness,
     timestamp: std::time::SystemTime,
     actual_length: u32,
     original_length: u32,
@@ -26,7 +25,6 @@ pub struct PcapRecord{
 }
 
 impl PcapRecord {
-    pub fn endianness(&self) -> nom::Endianness { self.endianness }
     pub fn timestamp(&self) -> &std::time::SystemTime {
         &self.timestamp
     }
@@ -73,14 +71,12 @@ impl PcapRecord {
     }
 
     pub fn new(
-        endianness: nom::Endianness,
         timestamp: std::time::SystemTime,
         actual_length: u32,
         original_length: u32,
         payload: std::vec::Vec<u8>
     ) -> PcapRecord {
         PcapRecord {
-            endianness,
             timestamp,
             actual_length,
             original_length,
@@ -99,7 +95,6 @@ impl PcapRecord {
 
             (
                 PcapRecord {
-                    endianness: endianness,
                     timestamp: PcapRecord::convert_packet_time(ts_seconds, ts_microseconds),
                     actual_length: actual_length,
                     original_length: original_length,
@@ -131,7 +126,7 @@ impl TryFrom<PcapRecord> for flow::Flow {
     type Error = errors::Error;
 
     fn try_from(value: PcapRecord) -> Result<Self, Self::Error> {
-        let l2 = Ethernet::parse(value.payload().as_slice(), value.endianness())
+        let l2 = Ethernet::parse(value.payload().as_slice())
             .map_err(|e| {
                 let err: Self::Error = e.into();
                 err

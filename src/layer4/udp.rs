@@ -8,14 +8,12 @@ use std::convert::TryFrom;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
 pub struct Udp {
-    endianness: Endianness,
     dst_port: u16,
     src_port: u16,
     payload: std::vec::Vec<u8>
 }
 
 impl Udp {
-    pub fn endianness(&self) -> Endianness { self.endianness }
     pub fn dst_port(&self) -> u16 {
         self.dst_port
     }
@@ -27,20 +25,18 @@ impl Udp {
     }
 
     pub fn new<'b>(
-        endianness: Endianness,
         dst_port: u16,
         src_port: u16,
         payload: std::vec::Vec<u8>
     ) -> Udp {
         Udp {
-            endianness,
             dst_port,
             src_port,
             payload
         }
     }
 
-    pub fn parse(input: &[u8], endianness: Endianness) -> IResult<&[u8], Udp> {
+    pub fn parse(input: &[u8]) -> IResult<&[u8], Udp> {
         do_parse!(input,
 
             dst_port: be_u16 >>
@@ -48,12 +44,11 @@ impl Udp {
             length: map!(be_u16, |s| {
                 (s as usize) - HEADER_LENGTH
             }) >>
-            checksum: u16!(endianness) >>
+            checksum: be_u16 >>
             payload: take!(length) >>
 
             (
                 Udp {
-                    endianness: endianness,
                     dst_port: dst_port,
                     src_port: src_port,
                     payload: payload.into()
@@ -101,11 +96,10 @@ mod tests {
     fn parse_udp() {
         let _ = env_logger::try_init();
 
-        let (rem, l4) = Udp::parse(RAW_DATA, Endianness::Big).expect("Unable to parse");
+        let (rem, l4) = Udp::parse(RAW_DATA).expect("Unable to parse");
 
         assert!(rem.is_empty());
 
-        assert_eq!(l4.endianness(), Endianness::Big);
         assert_eq!(l4.dst_port(), 50871);
         assert_eq!(l4.src_port(), 80);
         assert_eq!(l4.payload().as_slice(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
@@ -122,7 +116,7 @@ mod tests {
     fn convert_udp() {
         let _ = env_logger::try_init();
 
-        let (rem, l4) = Udp::parse(RAW_DATA, Endianness::Big).expect("Unable to parse");
+        let (rem, l4) = Udp::parse(RAW_DATA).expect("Unable to parse");
 
         assert!(rem.is_empty());
 

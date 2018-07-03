@@ -9,7 +9,6 @@ use std::convert::TryFrom;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
 pub struct Tcp {
-    endianness: Endianness,
     dst_port: u16,
     src_port: u16,
     sequence_number: u32,
@@ -20,7 +19,6 @@ pub struct Tcp {
 }
 
 impl Tcp {
-    pub fn endianness(&self) -> Endianness { self.endianness }
     pub fn dst_port(&self) -> u16 {
         self.dst_port
     }
@@ -37,7 +35,6 @@ impl Tcp {
     }
 
     pub fn new(
-        endianness: Endianness,
         dst_port: u16,
         src_port: u16,
         sequence_number: u32,
@@ -47,7 +44,6 @@ impl Tcp {
         payload: std::vec::Vec<u8>
     ) -> Tcp {
         Tcp {
-            endianness,
             dst_port,
             src_port,
             sequence_number,
@@ -58,18 +54,17 @@ impl Tcp {
         }
     }
 
-    pub fn parse(input: &[u8], endianness: Endianness) -> IResult<&[u8], Tcp> {
+    pub fn parse(input: &[u8]) -> IResult<&[u8], Tcp> {
         do_parse!(input,
             length: map!(be_u8, |s| Tcp::extract_length(s)) >>
             src_port: be_u16 >>
             dst_port: be_u16 >>
             sequence_number: be_u32 >>
             acknowledgement_number: be_u32 >>
-            flags: u16!(endianness) >>
+            flags: be_u16 >>
             payload: take!(length) >>
             (
                 Tcp {
-                    endianness: endianness,
                     dst_port: dst_port,
                     src_port: src_port,
                     sequence_number: sequence_number,
@@ -123,11 +118,10 @@ mod tests {
     fn parse_tcp() {
         let _ = env_logger::try_init();
 
-        let (rem, l4) = Tcp::parse(RAW_DATA, Endianness::Big).expect("Unable to parse");
+        let (rem, l4) = Tcp::parse(RAW_DATA).expect("Unable to parse");
 
         assert!(rem.is_empty());
 
-        assert_eq!(l4.endianness(), Endianness::Big);
         assert_eq!(l4.dst_port(), 80);
         assert_eq!(l4.src_port(), 50871);
         assert_eq!(l4.payload().as_slice(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
@@ -144,7 +138,7 @@ mod tests {
     fn convert_tcp() {
         let _ = env_logger::try_init();
 
-        let (rem, l4) = Tcp::parse(RAW_DATA, Endianness::Little).expect("Unable to parse");
+        let (rem, l4) = Tcp::parse(RAW_DATA).expect("Unable to parse");
 
         assert!(rem.is_empty());
 

@@ -77,7 +77,6 @@ mod tests {
     #[test]
     fn format_flow() {
         let record = PcapRecord::new(
-            nom::Endianness::Big,
             std::time::UNIX_EPOCH,
             0,
             0,

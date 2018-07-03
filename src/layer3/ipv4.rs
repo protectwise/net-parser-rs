@@ -1,5 +1,5 @@
 use super::prelude::*;
-use super::Layer3FlowInfo;
+use super::{InternetProtocolId, Layer3FlowInfo};
 
 use self::nom::*;
 use self::layer4::{
@@ -13,38 +13,12 @@ use std::convert::TryFrom;
 const ADDRESS_LENGTH: usize = 4;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
-///
-/// IP Protocol numbers https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-///
-#[derive(Clone, Debug, PartialEq)]
-pub enum Layer4Id {
-    //ICMP,
-    Tcp,
-    Udp
-}
-
-impl Layer4Id {
-    fn new(value: u8) -> Option<Layer4Id> {
-        match value {
-            //1 -> Some(Layer4Id::ICMP)
-            6 => Some(Layer4Id::Tcp),
-            17 => Some(Layer4Id::Udp),
-            _ => {
-                //TODO: change to warn once list is more complete
-                debug!("Encountered {:02x} when parsing layer 4 id", value);
-                None
-            }
-        }
-    }
-}
-
 pub struct IPv4 {
-    endianness: nom::Endianness,
     dst_ip: std::net::IpAddr,
     src_ip: std::net::IpAddr,
     flags: u16,
     ttl: u8,
-    protocol: Layer4Id,
+    protocol: InternetProtocolId,
     payload: std::vec::Vec<u8>
 }
 
@@ -54,7 +28,7 @@ fn to_ip_address(i: &[u8]) -> std::net::IpAddr {
 }
 
 named!(
-    ip_address<&[u8], std::net::IpAddr>,
+    ipv4_address<&[u8], std::net::IpAddr>,
     map!(take!(ADDRESS_LENGTH), to_ip_address)
 );
 
@@ -65,12 +39,12 @@ impl IPv4 {
     pub fn src_ip(&self) -> &std::net::IpAddr {
         &self.src_ip
     }
-    pub fn protocol(&self) -> &Layer4Id {
+    pub fn protocol(&self) -> &InternetProtocolId {
         &self.protocol
     }
     pub fn payload(&self) -> &std::vec::Vec<u8> { &self.payload }
 
-    fn parse_ipv4(input: &[u8], endianness: nom::Endianness, length_check: u8) -> IResult<&[u8], IPv4> {
+    fn parse_ipv4(input: &[u8], length_check: u8) -> IResult<&[u8], IPv4> {
         let header_length = (length_check  & 0x0F) * 4;
 
         do_parse!(input,
@@ -82,15 +56,14 @@ impl IPv4 {
             id: be_u16 >>
             flags: be_u16 >>
             ttl: be_u8 >>
-            proto: map_opt!(be_u8, Layer4Id::new) >>
+            proto: map_opt!(be_u8, InternetProtocolId::new) >>
             checksum: be_u16 >>
-            src_ip: ip_address >>
-            dst_ip: ip_address >>
+            src_ip: ipv4_address >>
+            dst_ip: ipv4_address >>
             payload: take!(length) >>
 
             (
                 IPv4 {
-                    endianness: endianness,
                     dst_ip: dst_ip,
                     src_ip: src_ip,
                     flags: flags,
@@ -103,31 +76,29 @@ impl IPv4 {
     }
 
     pub fn new(
-        endianness: nom::Endianness,
-        dst_ip: std::net::IpAddr,
-        src_ip: std::net::IpAddr,
+        dst_ip: std::net::Ipv4Addr,
+        src_ip: std::net::Ipv4Addr,
         flags: u16,
         ttl: u8,
-        protocol: Layer4Id,
+        protocol: InternetProtocolId,
         payload: std::vec::Vec<u8>
     ) -> IPv4 {
         IPv4 {
-            endianness,
-            dst_ip,
-            src_ip,
-            flags,
-            ttl,
-            protocol,
-            payload
+            dst_ip: std::net::IpAddr::V4(dst_ip),
+            src_ip: std::net::IpAddr::V4(src_ip),
+            flags: flags,
+            ttl: ttl,
+            protocol: protocol,
+            payload: payload
         }
     }
 
-    pub fn parse(input: &[u8], endianness: nom::Endianness) -> IResult<&[u8], IPv4> {
+    pub fn parse(input: &[u8]) -> IResult<&[u8], IPv4> {
         be_u8(input).and_then(|r| {
             let (rem, length_check) = r;
             let length = length_check >> 4;
             if length == 4 {
-                IPv4::parse_ipv4(rem, endianness, length_check)
+                IPv4::parse_ipv4(rem, length_check)
             } else {
                 Err(Err::convert(Err::Error(error_position!(rem, ErrorKind::CondReduce::<u32>))))
             }
@@ -141,8 +112,8 @@ impl TryFrom<IPv4> for Layer3FlowInfo {
     fn try_from(value: IPv4) -> Result<Self, Self::Error> {
         debug!("Creating flow info from {:?}", value.protocol);
         let l4 = match value.protocol.clone() {
-            Layer4Id::Tcp => {
-                layer4::tcp::Tcp::parse(value.payload(), value.endianness)
+            InternetProtocolId::Tcp => {
+                layer4::tcp::Tcp::parse(value.payload())
                     .map_err(|e| {
                         let err: Self::Error = e.into();
                         err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
@@ -155,8 +126,8 @@ impl TryFrom<IPv4> for Layer3FlowInfo {
                     }
                 })
             }
-            Layer4Id::Udp => {
-                layer4::udp::Udp::parse(value.payload(), value.endianness)
+            InternetProtocolId::Udp => {
+                layer4::udp::Udp::parse(value.payload())
                     .map_err(|e| {
                         let err: Self::Error = e.into();
                         err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
@@ -222,13 +193,13 @@ mod tests {
     fn parse_ipv4() {
         let _ = env_logger::try_init();
 
-        let (rem, l3) = IPv4::parse(RAW_DATA, Endianness::Big).expect("Unable to parse");
+        let (rem, l3) = IPv4::parse(RAW_DATA).expect("Unable to parse");
 
         assert!(rem.is_empty());
         assert_eq!(*l3.src_ip(), "1.2.3.4".parse::<std::net::IpAddr>().expect("Could not parse ip address"));
         assert_eq!(*l3.dst_ip(), "10.11.12.13".parse::<std::net::IpAddr>().expect("Could not parse ip address"));
 
-        let is_tcp = if let Layer4Id::Tcp = l3.protocol() {
+        let is_tcp = if let InternetProtocolId::Tcp = l3.protocol() {
             true
         } else {
             false
@@ -240,7 +211,7 @@ mod tests {
     fn convert_ipv4() {
         let _ = env_logger::try_init();
 
-        let (rem, l3) = IPv4::parse(RAW_DATA, Endianness::Little).expect("Unable to parse");
+        let (rem, l3) = IPv4::parse(RAW_DATA).expect("Unable to parse");
 
         let info = Layer3FlowInfo::try_from(l3).expect("Could not convert to layer 3 info");
 

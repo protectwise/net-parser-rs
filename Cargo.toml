@@ -12,8 +12,3 @@ log = "~0.4"
 [dev-dependencies]
 env_logger = "*"
 hex-slice = "~0.1"
-criterion = "0.2"
-
-[[bench]]
-name = "4sics"
-harness = false
