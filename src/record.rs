@@ -127,7 +127,7 @@ impl TryFrom<PcapRecord> for flow::Flow {
 
     fn try_from(value: PcapRecord) -> Result<Self, Self::Error> {
         trace!("Creating flow from payload of {}B", value.payload().len());
-        
+
         let l2 = Ethernet::parse(value.payload().as_slice())
             .map_err(|e| {
                 let err: Self::Error = e.into();
@@ -167,7 +167,7 @@ mod tests {
     const RAW_DATA: &'static [u8] = &[
         0x5Bu8, 0x11u8, 0x6Du8, 0xE3u8, //seconds, 1527868899
         0x00u8, 0x02u8, 0x51u8, 0xF5u8, //microseconds, 152053
-        0x00u8, 0x00u8, 0x00u8, 0x51u8, //actual length, 81: 14 (ethernet) + 20 (ipv4 header) + 15 (tcp header) + 32 (tcp payload)
+        0x00u8, 0x00u8, 0x00u8, 0x56u8, //actual length, 86: 14 (ethernet) + 20 (ipv4 header) + 20 (tcp header) + 32 (tcp payload)
         0x00u8, 0x00u8, 0x04u8, 0xD0u8, //original length, 1232
         //ethernet
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
@@ -176,7 +176,7 @@ mod tests {
         //ipv4
         0x45u8, //version and header length
         0x00u8, //tos
-        0x00u8, 0x43u8, //length, 20 bytes for header, 45 bytes for ethernet
+        0x00u8, 0x48u8, //length, 20 bytes for header, 52 bytes for ethernet
         0x00u8, 0x00u8, //id
         0x00u8, 0x00u8, //flags
         0x64u8, //ttl
@@ -185,12 +185,16 @@ mod tests {
         0x01u8, 0x02u8, 0x03u8, 0x04u8, //src ip 1.2.3.4
         0x0Au8, 0x0Bu8, 0x0Cu8, 0x0Du8, //dst ip 10.11.12.13
         //tcp
-        0x80u8, //length, 8 words (32 bytes)
         0xC6u8, 0xB7u8, //src port, 50871
         0x00u8, 0x50u8, //dst port, 80
         0x00u8, 0x00u8, 0x00u8, 0x01u8, //sequence number, 1
         0x00u8, 0x00u8, 0x00u8, 0x02u8, //acknowledgement number, 2
-        0x00u8, 0x00u8, //flags, 0
+        0x50u8, 0x00u8, //header and flags, 0
+        0x00u8, 0x00u8, //window
+        0x00u8, 0x00u8, //check
+        0x00u8, 0x00u8, //urgent
+        //no options
+        //payload
         0x01u8, 0x02u8, 0x03u8, 0x04u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
@@ -198,7 +202,7 @@ mod tests {
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words (32 bytes)
+        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
     ];
 
     #[test]
@@ -207,7 +211,7 @@ mod tests {
 
         let record = PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse").1;
 
-        assert_eq!(format!("{}", record), "Timestamp=1527868899152   Length=81   Original Length=1232");
+        assert_eq!(format!("{}", record), "Timestamp=1527868899152   Length=86   Original Length=1232");
     }
 
     #[test]
@@ -230,7 +234,7 @@ mod tests {
 
         let offset = std::time::Duration::from_secs(1527868899) + std::time::Duration::from_micros(152053);
         assert_eq!(*record.timestamp(), std::time::UNIX_EPOCH + offset);
-        assert_eq!(record.actual_length(), 81);
+        assert_eq!(record.actual_length(), 86);
         assert_eq!(record.original_length(), 1232);
     }
 

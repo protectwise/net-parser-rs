@@ -44,14 +44,18 @@ impl IPv4 {
     }
     pub fn payload(&self) -> &std::vec::Vec<u8> { &self.payload }
 
-    fn parse_ipv4(input: &[u8], length_check: u8) -> IResult<&[u8], IPv4> {
-        let header_length = (length_check  & 0x0F) * 4;
+    fn parse_ipv4(input: &[u8], version_and_length: u8) -> IResult<&[u8], IPv4> {
+        let header_length = (version_and_length  & 0x0F) * 4;
+
+        trace!("Header Length={}", header_length);
 
         do_parse!(input,
 
             tos: be_u8 >>
             length: map!(be_u16, |s| {
-                s - (header_length as u16)
+                let l = s - (header_length as u16);
+                trace!("Payload Length={}", l);
+                l
             }) >>
             id: be_u16 >>
             flags: be_u16 >>
@@ -97,12 +101,12 @@ impl IPv4 {
         trace!("Available={}", input.len());
 
         be_u8(input).and_then(|r| {
-            let (rem, length_check) = r;
-            let length = length_check >> 4;
-            if length == 4 {
-                IPv4::parse_ipv4(rem, length_check)
+            let (rem, version_and_length) = r;
+            let version = version_and_length >> 4;
+            if version == 4 {
+                IPv4::parse_ipv4(rem, version_and_length)
             } else {
-                Err(Err::convert(Err::Error(error_position!(rem, ErrorKind::CondReduce::<u32>))))
+                Err(Err::convert(Err::Error(error_position!(input, ErrorKind::CondReduce::<u32>))))
             }
         })
     }
@@ -166,7 +170,7 @@ mod tests {
     const RAW_DATA: &'static [u8] = &[
         0x45u8, //version and header length
         0x00u8, //tos
-        0x00u8, 0x43u8, //length, 20 bytes for header, 45 bytes for ethernet
+        0x00u8, 0x48u8, //length, 20 bytes for header, 52 bytes for ethernet
         0x00u8, 0x00u8, //id
         0x00u8, 0x00u8, //flags
         0x64u8, //ttl
@@ -175,12 +179,16 @@ mod tests {
         0x01u8, 0x02u8, 0x03u8, 0x04u8, //src ip 1.2.3.4
         0x0Au8, 0x0Bu8, 0x0Cu8, 0x0Du8, //dst ip 10.11.12.13
         //tcp
-        0x80u8, //length, 8 words (32 bytes)
         0xC6u8, 0xB7u8, //src port, 50871
         0x00u8, 0x50u8, //dst port, 80
         0x00u8, 0x00u8, 0x00u8, 0x01u8, //sequence number, 1
         0x00u8, 0x00u8, 0x00u8, 0x02u8, //acknowledgement number, 2
-        0x00u8, 0x00u8, //flags, 0
+        0x50u8, 0x00u8, //header and flags, 0
+        0x00u8, 0x00u8, //window
+        0x00u8, 0x00u8, //check
+        0x00u8, 0x00u8, //urgent
+        //no options
+        //payload
         0x01u8, 0x02u8, 0x03u8, 0x04u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
@@ -188,7 +196,7 @@ mod tests {
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words (32 bytes)
+        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
     ];
 
     #[test]

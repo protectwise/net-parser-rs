@@ -208,7 +208,7 @@ impl TryFrom<Ethernet> for Layer2FlowInfo {
 
     fn try_from(value: Ethernet) -> Result<Self, Self::Error> {
         let ether_type = value.ether_type;
-        debug!("Creating from from layer 3 type {:?}", ether_type);
+        debug!("Creating from layer 3 type {:?} using payload of {}B", ether_type, value.payload.len());
         let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
             match l3_id {
                 Layer3Id::IPv4 => {
@@ -279,7 +279,7 @@ mod tests {
         //ipv4
         0x45u8, //version and header length
         0x00u8, //tos
-        0x00u8, 0x43u8, //length, 20 bytes for header, 45 bytes for ethernet
+        0x00u8, 0x48u8, //length, 20 bytes for header, 52 bytes for ethernet
         0x00u8, 0x00u8, //id
         0x00u8, 0x00u8, //flags
         0x64u8, //ttl
@@ -288,12 +288,16 @@ mod tests {
         0x01u8, 0x02u8, 0x03u8, 0x04u8, //src ip 1.2.3.4
         0x0Au8, 0x0Bu8, 0x0Cu8, 0x0Du8, //dst ip 10.11.12.13
         //tcp
-        0x80u8, //length, 8 words (32 bytes)
         0xC6u8, 0xB7u8, //src port, 50871
         0x00u8, 0x50u8, //dst port, 80
         0x00u8, 0x00u8, 0x00u8, 0x01u8, //sequence number, 1
         0x00u8, 0x00u8, 0x00u8, 0x02u8, //acknowledgement number, 2
-        0x00u8, 0x00u8, //flags, 0
+        0x50u8, 0x00u8, //header and flags, 0
+        0x00u8, 0x00u8, //window
+        0x00u8, 0x00u8, //check
+        0x00u8, 0x00u8, //urgent
+        //no options
+        //payload
         0x01u8, 0x02u8, 0x03u8, 0x04u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
@@ -301,7 +305,7 @@ mod tests {
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words (32 bytes)
+        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
     ];
 
     #[test]

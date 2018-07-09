@@ -86,7 +86,7 @@ impl IPv6 {
             ( (p, h) )
         )?;
 
-        println!("parsed payload as {}", payload_length);
+        trace!("Payload Lengt={}", payload_length);
 
         IPv6::parse_next_header(rem, payload_length, next_header)
     }
@@ -114,7 +114,7 @@ impl IPv6 {
             if version == 6 {
                 IPv6::parse_ipv6(rem)
             } else {
-                Err(Err::convert(Err::Error(error_position!(rem, ErrorKind::CondReduce::<u32>))))
+                Err(Err::convert(Err::Error(error_position!(input, ErrorKind::CondReduce::<u32>))))
             }
         })
     }
@@ -178,18 +178,22 @@ mod tests {
     const RAW_DATA: &'static [u8] = &[
         0x65u8, //version and header length
         0x00u8, 0x00u8, 0x00u8, //traffic class and label
-        0x00u8, 0x2Fu8, //payload length
+        0x00u8, 0x34u8, //payload length
         0x06u8, //next hop, protocol, tcp
         0x00u8, //hop limit
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, 0x07u8, 0x08u8, 0x09u8, 0x0Au8, 0x0Bu8, 0x0Cu8, 0x0Du8, 0x0Eu8, 0x0Fu8, 0x0Fu8,//src ip 12:34:56:78:9A:BC:DE:FF
         0x0Fu8, 0x00u8, 0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, 0x07u8, 0x08u8, 0x09u8, 0x0Au8, 0x0Bu8, 0x0Cu8, 0x0Du8, 0x0Eu8,//dst ip F0:12:34:56:78:9A:BC:DE
         //tcp
-        0x80u8, //length, 8 words (32 bytes)
         0xC6u8, 0xB7u8, //src port, 50871
         0x00u8, 0x50u8, //dst port, 80
         0x00u8, 0x00u8, 0x00u8, 0x01u8, //sequence number, 1
         0x00u8, 0x00u8, 0x00u8, 0x02u8, //acknowledgement number, 2
-        0x00u8, 0x00u8, //flags, 0
+        0x50u8, 0x00u8, //header and flags, 0
+        0x00u8, 0x00u8, //window
+        0x00u8, 0x00u8, //check
+        0x00u8, 0x00u8, //urgent
+        //no options
+        //payload
         0x01u8, 0x02u8, 0x03u8, 0x04u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
@@ -197,7 +201,7 @@ mod tests {
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words (32 bytes)
+        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
     ];
 
     #[test]

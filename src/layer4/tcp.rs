@@ -3,10 +3,12 @@ use super::super::flow;
 use super::Layer4FlowInfo;
 
 use self::nom::*;
+use nom::Err as NomErr;
 use std;
 use std::convert::TryFrom;
 
-const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
+const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
+const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
 
 pub struct Tcp {
     dst_port: u16,
@@ -14,7 +16,6 @@ pub struct Tcp {
     sequence_number: u32,
     acknowledgement_number: u32,
     flags: u16,
-    length: usize,
     payload: std::vec::Vec<u8>
 }
 
@@ -29,11 +30,9 @@ impl Tcp {
         &self.payload
     }
 
-    fn extract_length(value: u8) -> usize {
-        let words = value >> 4;
-        let r = (words * 4) as usize;
-        trace!("Payload Length={}", r);
-        r
+    pub fn extract_length(value: u16) -> usize {
+        let words = value >> 12;
+        (words * 4) as usize
     }
 
     pub fn new(
@@ -42,7 +41,6 @@ impl Tcp {
         sequence_number: u32,
         acknowledgement_number: u32,
         flags: u16,
-        length: usize,
         payload: std::vec::Vec<u8>
     ) -> Tcp {
         Tcp {
@@ -51,7 +49,6 @@ impl Tcp {
             sequence_number,
             acknowledgement_number,
             flags,
-            length,
             payload
         }
     }
@@ -61,21 +58,32 @@ impl Tcp {
 
         do_parse!(input,
 
-            length: map!(be_u8, |s| Tcp::extract_length(s)) >>
             src_port: be_u16 >>
             dst_port: be_u16 >>
             sequence_number: be_u32 >>
             acknowledgement_number: be_u32 >>
-            flags: be_u16 >>
-            payload: take!(length) >>
+            header_length_and_flags: map_res!(be_u16, |v| {
+                let hl = Tcp::extract_length(v);
+                trace!("Header Length={}", hl);
+                if hl >= MINIMUM_HEADER_BYTES && hl <= MAXIMUM_HEADER_BYTES {
+                    let flags = v & 0x01FF; //take lower 9 bits
+                    Ok( (hl, flags) ) as Result<(usize, u16), nom::Context<&[u8]>>
+                } else {
+                    Err(error_position!(input, ErrorKind::CondReduce::<u32>))
+                }
+            }) >>
+            window: be_u16 >>
+            check: be_u16 >>
+            urgent: be_u16 >>
+            options: take!(header_length_and_flags.0 - MINIMUM_HEADER_BYTES) >>
+            payload: rest >>
             (
                 Tcp {
                     dst_port: dst_port,
                     src_port: src_port,
                     sequence_number: sequence_number,
                     acknowledgement_number: acknowledgement_number,
-                    flags: flags,
-                    length: length,
+                    flags: header_length_and_flags.1,
                     payload: payload.into()
                 }
             )
@@ -103,12 +111,16 @@ mod tests {
     use super::*;
 
     const RAW_DATA: &'static [u8] = &[
-        0x80u8, //length, 8 words (32 bytes)
         0xC6u8, 0xB7u8, //src port, 50871
         0x00u8, 0x50u8, //dst port, 80
         0x00u8, 0x00u8, 0x00u8, 0x01u8, //sequence number, 1
         0x00u8, 0x00u8, 0x00u8, 0x02u8, //acknowledgement number, 2
-        0x00u8, 0x00u8, //flags, 0
+        0x50u8, 0x00u8, //header and flags, 0
+        0x00u8, 0x00u8, //window
+        0x00u8, 0x00u8, //check
+        0x00u8, 0x00u8, //urgent
+        //no options
+        //payload
         0x01u8, 0x02u8, 0x03u8, 0x04u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
@@ -118,6 +130,12 @@ mod tests {
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
     ];
+
+    #[test]
+    fn convert_length() {
+        assert_eq!(Tcp::extract_length(0x0000u16), 0); //0 words, 0 bytes
+        assert_eq!(Tcp::extract_length(0x3000u16), 12); //3 words, 12 bytes
+    }
 
     #[test]
     fn parse_tcp() {
