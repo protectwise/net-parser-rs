@@ -126,6 +126,8 @@ impl TryFrom<PcapRecord> for flow::Flow {
     type Error = errors::Error;
 
     fn try_from(value: PcapRecord) -> Result<Self, Self::Error> {
+        trace!("Creating flow from payload of {}B", value.payload().len());
+        
         let l2 = Ethernet::parse(value.payload().as_slice())
             .map_err(|e| {
                 let err: Self::Error = e.into();

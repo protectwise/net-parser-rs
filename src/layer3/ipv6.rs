@@ -106,6 +106,8 @@ impl IPv6 {
     }
 
     pub fn parse(input: &[u8]) -> IResult<&[u8], IPv6> {
+        trace!("Available={}", input.len());
+
         be_u8(input).and_then(|r| {
             let (rem, length_check) = r;
             let version = length_check >> 4;

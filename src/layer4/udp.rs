@@ -37,6 +37,8 @@ impl Udp {
     }
 
     pub fn parse(input: &[u8]) -> IResult<&[u8], Udp> {
+        trace!("Available={}", input.len());
+
         do_parse!(input,
 
             dst_port: be_u16 >>

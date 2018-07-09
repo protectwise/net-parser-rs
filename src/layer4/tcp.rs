@@ -31,7 +31,9 @@ impl Tcp {
 
     fn extract_length(value: u8) -> usize {
         let words = value >> 4;
-        (words * 4) as usize
+        let r = (words * 4) as usize;
+        trace!("Payload Length={}", r);
+        r
     }
 
     pub fn new(
@@ -55,7 +57,10 @@ impl Tcp {
     }
 
     pub fn parse(input: &[u8]) -> IResult<&[u8], Tcp> {
+        trace!("Available={}", input.len());
+
         do_parse!(input,
+
             length: map!(be_u8, |s| Tcp::extract_length(s)) >>
             src_port: be_u16 >>
             dst_port: be_u16 >>

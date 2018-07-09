@@ -94,6 +94,8 @@ impl IPv4 {
     }
 
     pub fn parse(input: &[u8]) -> IResult<&[u8], IPv4> {
+        trace!("Available={}", input.len());
+
         be_u8(input).and_then(|r| {
             let (rem, length_check) = r;
             let length = length_check >> 4;

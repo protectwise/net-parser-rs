@@ -186,7 +186,10 @@ impl Ethernet {
     }
 
     pub fn parse(input: &[u8]) -> nom::IResult<&[u8], Ethernet> {
+        trace!("Available={}", input.len());
+
         let r = do_parse!(input,
+
             dst_mac: mac_address >>
             src_mac: mac_address >>
 
