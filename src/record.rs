@@ -1,7 +1,14 @@
-use super::prelude::*;
-
-use super::{
-    flow,
+use crate::{
+    prelude::*,
+    errors::{
+        Error,
+        ErrorKind
+    },
+    flow::{
+        Device,
+        Flow,
+        FlowRecord
+    },
     layer2::{
         Layer2,
         Layer2FlowInfo,
@@ -9,22 +16,43 @@ use super::{
     }
 };
 
-use self::nom::*;
+use nom::{
+    be_u32,
+    Endianness,
+    Err as NomError,
+    ErrorKind as NomErrorKind,
+    le_u32
+};
 
-use std;
-use std::convert::TryFrom;
+use std::{
+    self,
+    convert::TryFrom
+};
 
 ///
 /// Pcap record associated with a libpcap capture
 ///
-pub struct PcapRecord{
+pub struct PcapRecord<'a> {
     timestamp: std::time::SystemTime,
     actual_length: u32,
     original_length: u32,
-    payload: std::vec::Vec<u8>
+    payload: &'a [u8],
+    flow: Option<Flow>
 }
 
-impl PcapRecord {
+impl<'a> Default for PcapRecord<'a> {
+    fn default() -> Self {
+        PcapRecord {
+            timestamp: std::time::SystemTime::UNIX_EPOCH,
+            actual_length: 0,
+            original_length: 0,
+            payload: &[0u8; 0],
+            flow: None
+        }
+    }
+}
+
+impl<'a> PcapRecord<'a> {
     pub fn timestamp(&self) -> &std::time::SystemTime {
         &self.timestamp
     }
@@ -34,8 +62,8 @@ impl PcapRecord {
     pub fn original_length(&self) -> u32 {
         self.original_length
     }
-    pub fn payload(&self) -> &std::vec::Vec<u8> { &self.payload }
-    pub unsafe fn packet_data(&mut self) -> *mut u8 { self.payload.as_mut_ptr() }
+    pub fn payload(&self) -> &'a [u8] { &self.payload }
+    pub fn flow(&self) -> &Option<Flow> { &self.flow }
 
     ///
     /// Convert a packet time (seconds and partial second microseconds) to a system time (offset from epoch)
@@ -46,45 +74,46 @@ impl PcapRecord {
     }
 
     ///
-    /// Utility function to convert a vector of records to flows, unless an error is encountered in flow conversion
+    /// Utility function to convert a vector of records to flows, unless an error is encountered in stream conversion
     ///
-    pub fn convert_records(mut records: std::vec::Vec<PcapRecord>, ignore_error: bool) -> Result<std::vec::Vec<flow::Flow>, errors::Error> {
-        let mut result = vec![];
-        result.reserve_exact(records.len());
+    pub fn convert_records<'b>(records: std::vec::Vec<PcapRecord<'b>>) -> std::vec::Vec<PcapRecord<'b>> {
+        let mut records = records;
+        let mut results = vec![];
 
-        while let Some(record) = records.pop() {
-            match Flow::try_from(record) {
-                Ok(f) => {
-                    result.push(f)
-                },
-                Err(e) => {
-                    if ignore_error {
-                        debug!("Failed to extract flow: {}", e);
-                    } else {
-                        return Err(e)
+        loop {
+            if let Some(mut r) = records.pop() {
+                match r.with_flow() {
+                    Ok(_) => {
+                        results.push(r);
+                    },
+                    Err(e) => {
+                        debug!("Failed to extract stream: {}", e);
                     }
                 }
+            } else {
+                break;
             }
-        };
+        }
 
-        Ok(result)
+        results
     }
 
     pub fn new(
         timestamp: std::time::SystemTime,
         actual_length: u32,
         original_length: u32,
-        payload: std::vec::Vec<u8>
-    ) -> PcapRecord {
+        payload: &'a [u8]
+    ) -> PcapRecord<'a> {
         PcapRecord {
-            timestamp,
-            actual_length,
-            original_length,
-            payload
+            timestamp: timestamp,
+            actual_length: actual_length,
+            original_length: original_length,
+            payload: payload,
+            flow: None
         }
     }
 
-    pub fn parse(input: &[u8], endianness: nom::Endianness) -> nom::IResult<&[u8], PcapRecord> {
+    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], PcapRecord<'b>> {
         do_parse!(input,
 
             ts_seconds: u32!(endianness) >>
@@ -98,14 +127,48 @@ impl PcapRecord {
                     timestamp: PcapRecord::convert_packet_time(ts_seconds, ts_microseconds),
                     actual_length: actual_length,
                     original_length: original_length,
-                    payload: payload.into()
+                    payload: payload,
+                    flow: None
                 }
             )
         )
     }
+
+    pub fn with_flow(&mut self) -> Result<&mut Self, Error> {
+        trace!("Creating stream from payload of {}B", self.payload.len());
+
+        let l2 = Ethernet::parse(self.payload())
+            .map_err(Error::from)
+            .and_then(|r| {
+            let (rem, l2) = r;
+            if rem.is_empty() {
+                Layer2FlowInfo::try_from(l2)
+            } else {
+                Err(Error::from_kind(ErrorKind::IncompleteParse(rem.len())))
+            }
+        })?;
+
+        let flow = Flow::new(
+            Device::new(
+                l2.src_mac,
+                l2.layer3.src_ip,
+                l2.layer3.layer4.src_port
+            ),
+            Device::new(
+                l2.dst_mac,
+                l2.layer3.dst_ip,
+                l2.layer3.layer4.dst_port
+            ),
+            l2.vlan
+        );
+
+        self.flow = Some(flow);
+
+        Ok(self)
+    }
 }
 
-impl std::fmt::Display for PcapRecord {
+impl<'a> std::fmt::Display for PcapRecord<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.timestamp.duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -117,44 +180,16 @@ impl std::fmt::Display for PcapRecord {
                        d.subsec_millis(),
                        self.actual_length,
                        self.original_length
-                )
+                ).and_then(|_| {
+                    if let Some(ref flw) = self.flow {
+                        write!(f, "   Flow=").and_then(|_| {
+                            flw.fmt(f)
+                        })
+                    } else {
+                        write!(f, "   Flow=None")
+                    }
+                })
             })
-    }
-}
-
-impl TryFrom<PcapRecord> for flow::Flow {
-    type Error = errors::Error;
-
-    fn try_from(value: PcapRecord) -> Result<Self, Self::Error> {
-        trace!("Creating flow from payload of {}B", value.payload().len());
-
-        let l2 = Ethernet::parse(value.payload().as_slice())
-            .map_err(|e| {
-                let err: Self::Error = e.into();
-                err
-            }).and_then(|r| {
-            let (rem, l2) = r;
-            if rem.is_empty() {
-                Layer2FlowInfo::try_from(l2)
-            } else {
-                Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
-            }
-        })?;
-
-        Ok(Flow {
-            source: flow::Device {
-                mac: l2.src_mac,
-                ip: l2.layer3.src_ip,
-                port: l2.layer3.layer4.src_port
-            },
-            destination: flow::Device {
-                mac: l2.dst_mac,
-                ip: l2.layer3.dst_ip,
-                port: l2.layer3.layer4.dst_port
-            },
-            record: value,
-            vlan: l2.vlan
-        })
     }
 }
 
@@ -211,7 +246,7 @@ mod tests {
 
         let record = PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse").1;
 
-        assert_eq!(format!("{}", record), "Timestamp=1527868899152   Length=86   Original Length=1232");
+        assert_eq!(format!("{}", record), "Timestamp=1527868899152   Length=86   Original Length=1232   Flow=None");
     }
 
     #[test]
@@ -242,13 +277,15 @@ mod tests {
     fn convert_record() {
         let _ = env_logger::try_init();
 
-        let (rem, record) = PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse");
+        let (rem, mut record) = PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse");
 
         assert!(rem.is_empty());
 
-        let info = flow::Flow::try_from(record).expect("Could not extract flow");
-
-        assert_eq!(info.source().port, 50871);
-        assert_eq!(info.destination().port, 80);
+        if let Some(ref flow) = record.with_flow().expect("Could not extract stream").flow() {
+            assert_eq!(flow.source().port(), 50871);
+            assert_eq!(flow.destination().port(), 80);
+        } else {
+            panic!("No flow set");
+        }
     }
 }

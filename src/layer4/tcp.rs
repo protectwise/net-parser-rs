@@ -1,32 +1,40 @@
-use super::prelude::*;
-use super::super::flow;
-use super::Layer4FlowInfo;
+use crate::{
+    flow,
+    layer4::Layer4FlowInfo,
+    prelude::*
+};
 
-use self::nom::*;
-use nom::Err as NomErr;
+use nom::{
+    be_u16,
+    be_u32,
+    Err as NomError,
+    ErrorKind as NomErrorKind,
+    IResult,
+    rest
+};
 use std;
 use std::convert::TryFrom;
 
 const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
 const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
 
-pub struct Tcp {
+pub struct Tcp<'a> {
     dst_port: u16,
     src_port: u16,
     sequence_number: u32,
     acknowledgement_number: u32,
     flags: u16,
-    payload: std::vec::Vec<u8>
+    payload: &'a [u8]
 }
 
-impl Tcp {
+impl<'a> Tcp<'a> {
     pub fn dst_port(&self) -> u16 {
         self.dst_port
     }
     pub fn src_port(&self) -> u16 {
         self.src_port
     }
-    pub fn payload(&self) -> &std::vec::Vec<u8> {
+    pub fn payload(&self) -> &'a [u8] {
         &self.payload
     }
 
@@ -41,7 +49,7 @@ impl Tcp {
         sequence_number: u32,
         acknowledgement_number: u32,
         flags: u16,
-        payload: std::vec::Vec<u8>
+        payload: &'a [u8]
     ) -> Tcp {
         Tcp {
             dst_port,
@@ -53,7 +61,7 @@ impl Tcp {
         }
     }
 
-    pub fn parse(input: &[u8]) -> IResult<&[u8], Tcp> {
+    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], Tcp<'b>> {
         trace!("Available={}", input.len());
 
         do_parse!(input,
@@ -69,7 +77,7 @@ impl Tcp {
                     let flags = v & 0x01FF; //take lower 9 bits
                     Ok( (hl, flags) ) as Result<(usize, u16), nom::Context<&[u8]>>
                 } else {
-                    Err(error_position!(input, ErrorKind::CondReduce::<u32>))
+                    Err(error_position!(input, NomErrorKind::CondReduce::<u32>))
                 }
             }) >>
             window: be_u16 >>
@@ -91,10 +99,10 @@ impl Tcp {
     }
 }
 
-impl TryFrom<Tcp> for Layer4FlowInfo {
+impl<'a> TryFrom<Tcp<'a>> for Layer4FlowInfo {
     type Error = errors::Error;
 
-    fn try_from(value: Tcp) -> Result<Self, Self::Error> {
+    fn try_from(value: Tcp<'a>) -> Result<Self, Self::Error> {
         Ok(Layer4FlowInfo {
             dst_port: value.dst_port,
             src_port: value.src_port
@@ -147,7 +155,7 @@ mod tests {
 
         assert_eq!(l4.dst_port(), 80);
         assert_eq!(l4.src_port(), 50871);
-        assert_eq!(l4.payload().as_slice(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
+        assert_eq!(l4.payload(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,

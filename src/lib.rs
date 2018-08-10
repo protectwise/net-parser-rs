@@ -1,5 +1,5 @@
 #![allow(unused)]
-#![feature(trace_macros, try_from, test)]
+#![feature(test, futures_api, pin, arbitrary_self_types, try_from)]
 #![recursion_limit="128"]
 ///! net-parser-rs
 ///!
@@ -7,22 +7,20 @@
 ///! associated records.
 ///!
 #[macro_use] pub extern crate arrayref;
-#[macro_use] pub extern crate error_chain;
-#[macro_use(debug, info, error, log, trace, warn)] pub extern crate log;
+#[macro_use] extern crate error_chain;
+#[macro_use] pub extern crate futures;
+#[macro_use(debug, info, error, log, trace, warn)] extern crate log;
 #[macro_use] pub extern crate nom;
+#[macro_use] extern crate pin_utils;
 
 pub mod prelude {
-    pub use super::arrayref::*;
-    pub use super::common::*;
-    pub use super::convert::*;
-    pub use super::nom;
-    pub use super::errors;
-}
-
-pub mod convert {
-    pub use super::flow::Flow;
-    pub use super::record::*;
-    pub use std::convert::TryFrom;
+    pub use super::{
+        arrayref::*,
+        common::*,
+        futures,
+        nom,
+        errors
+    };
 }
 
 pub mod errors {
@@ -39,7 +37,7 @@ pub mod errors {
         }
         errors {
             FlowParse {
-                display("Parsing failure when converting to flow")
+                display("Parsing failure when converting to stream")
             }
             NomIncomplete(needed: String) {
                 display("Not enough data to parse, needed {}", needed)
@@ -63,7 +61,7 @@ pub mod errors {
                 display("Invalid ipv6 type {:?}", value)
             }
             FlowConversion(why: String) {
-                display("Could not convert to flow {}", why)
+                display("Could not convert to stream {}", why)
             }
             NotImplemented {
                 display("Not implemented yet")
@@ -98,8 +96,9 @@ pub mod layer2;
 pub mod layer3;
 pub mod layer4;
 pub mod record;
+pub mod stream;
 
-use errors::*;
+use self::errors::*;
 use nom::*;
 
 ///
@@ -122,10 +121,10 @@ use nom::*;
 ///    //Parse a single packet
 ///    let packet = CaptureParser::parse_record(packet_bytes).expect("Could not parse");
 ///
-///    //Convert a packet into flow information
+///    //Convert a packet into stream information
 ///    use net_parser_rs::convert::*;
 ///
-///    let flow = Flow::try_from(packet).expect("Could not convert packet");
+///    let stream = Flow::try_from(packet).expect("Could not convert packet");
 ///```
 ///
 pub struct CaptureParser;
@@ -134,7 +133,7 @@ impl CaptureParser {
     ///
     /// Parse a slice of bytes that start with libpcap file format header (https://wiki.wireshark.org/Development/LibpcapFileFormat)
     ///
-    pub fn parse_file(input: &[u8]) -> IResult<&[u8], (global_header::GlobalHeader, std::vec::Vec<record::PcapRecord>)> {
+    pub fn parse_file<'a>(input: &'a [u8]) -> IResult<&'a [u8], (global_header::GlobalHeader, std::vec::Vec<record::PcapRecord<'a>>)> {
         let header_res = global_header::GlobalHeader::parse(input);
 
         header_res.and_then(|r| {
@@ -157,7 +156,7 @@ impl CaptureParser {
     /// header (https://wiki.wireshark.org/Development/LibpcapFileFormat). Endianness of the byte
     /// slice must be known.
     ///
-    pub fn parse_records(input: &[u8], endianness: Endianness) -> IResult<&[u8], std::vec::Vec<record::PcapRecord>> {
+    pub fn parse_records<'a>(input: &'a [u8], endianness: Endianness) -> IResult<&'a [u8], std::vec::Vec<record::PcapRecord<'a>>> {
         let mut records: std::vec::Vec<record::PcapRecord> = vec![];
         let mut current = input;
 
@@ -188,7 +187,7 @@ impl CaptureParser {
     ///
     /// Parse a slice of bytes as a single record. Endianness must be known.
     ///
-    pub fn parse_record(input: &[u8], endianness: Endianness) -> IResult<&[u8], record::PcapRecord> {
+    pub fn parse_record<'a>(input: &'a [u8], endianness: Endianness) -> IResult<&'a [u8], record::PcapRecord<'a>> {
         record::PcapRecord::parse(input, endianness)
     }
 }
@@ -199,7 +198,6 @@ mod tests {
     extern crate test;
 
     use super::*;
-    use super::convert::*;
     use std::io::prelude::*;
     use std::path::PathBuf;
     use self::test::Bencher;
@@ -273,11 +271,15 @@ mod tests {
 
         assert!(rem.is_empty());
 
-        let record = records.pop().unwrap();
-        let flow = Flow::try_from(record).expect("Failed to convert record");
+        let mut record = records.pop().unwrap();
+        record.with_flow().expect("Failed to convert record");
 
-        assert_eq!(flow.source.port, 50871);
-        assert_eq!(flow.destination.port, 80);
+        if let Some(ref flow) = record.flow() {
+            assert_eq!(flow.source().port(), 50871);
+            assert_eq!(flow.destination().port(), 80);
+        } else {
+            panic!("No flow set")
+        }
     }
 
     #[test]
@@ -311,9 +313,9 @@ mod tests {
         assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
 
-        let flows = PcapRecord::convert_records(records, true).expect("Failed to convert to flows");
+        let converted_records = record::PcapRecord::convert_records(records);
 
-        assert_eq!(flows.len(), 129643);
+        assert_eq!(converted_records.len(), 129643);
     }
 
     #[bench]
@@ -350,9 +352,9 @@ mod tests {
             assert_eq!(header.endianness(), Endianness::Little);
             assert_eq!(records.len(), 246137);
 
-            let flows = PcapRecord::convert_records(records, true).expect("Failed to convert to flows");
+            let converted_records = record::PcapRecord::convert_records(records);
 
-            assert_eq!(flows.len(), 129643);
+            assert_eq!(converted_records.len(), 129643);
         });
     }
 }

@@ -1,6 +1,8 @@
-use super::prelude::*;
+use crate::prelude::*;
 
-use self::nom::*;
+use nom::*;
+
+use std::mem::PinMut;
 
 const MAGIC_NUMBER: u32 = 0xA1B2C3D4u32;
 #[cfg(target_endian = "little")]
@@ -32,7 +34,7 @@ impl GlobalHeader {
         self.snap_length
     }
 
-    pub(crate) fn parse<'a>(input: &'a [u8]) -> IResult<&'a [u8], GlobalHeader> {
+    pub fn parse<'a>(input: &'a [u8]) -> IResult<&'a [u8], GlobalHeader> {
         do_parse!(input,
 
             endianness: map!(u32!(NATIVE_ENDIAN), |e| {

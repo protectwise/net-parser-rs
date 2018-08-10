@@ -1,22 +1,19 @@
-pub mod prelude {
-    pub use super::super::prelude::*;
-    pub use super::super::layer3;
-}
+use crate::{
+    common::*,
+    layer3::Layer3FlowInfo
+};
 
 pub mod ethernet;
-
-use super::common::*;
-use super::layer3::Layer3FlowInfo;
 
 ///
 /// Layer2 types that can be parsed
 ///
-pub enum Layer2 {
-    Ethernet(ethernet::Ethernet)
+pub enum Layer2<'a> {
+    Ethernet(ethernet::Ethernet<'a>)
 }
 
 ///
-/// Information from Layer 2 protocols used in flow determination
+/// Information from Layer 2 protocols used in stream determination
 ///
 pub struct Layer2FlowInfo {
     pub src_mac: MacAddress,

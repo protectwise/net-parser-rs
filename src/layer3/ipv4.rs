@@ -1,25 +1,41 @@
-use super::prelude::*;
-use super::{InternetProtocolId, Layer3FlowInfo};
+use crate::{
+    prelude::*,
+    layer3::{
+        InternetProtocolId,
+        Layer3FlowInfo
+    },
+    layer4::{
+        Layer4,
+        Layer4FlowInfo,
+        tcp::*,
+        udp::*
+    }
+};
 
-use self::nom::*;
-use self::layer4::{
-    Layer4,
-    Layer4FlowInfo,
-    tcp::*,
-    udp::*};
-use std;
-use std::convert::TryFrom;
+use nom::{
+    be_u8,
+    be_u16,
+    Convert,
+    Err as NomError,
+    ErrorKind as NomErrorKind,
+    IResult
+};
+
+use std::{
+    self,
+    convert::TryFrom
+};
 
 const ADDRESS_LENGTH: usize = 4;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
-pub struct IPv4 {
+pub struct IPv4<'a> {
     dst_ip: std::net::IpAddr,
     src_ip: std::net::IpAddr,
     flags: u16,
     ttl: u8,
     protocol: InternetProtocolId,
-    payload: std::vec::Vec<u8>
+    payload: &'a [u8]
 }
 
 fn to_ip_address(i: &[u8]) -> std::net::IpAddr {
@@ -32,7 +48,7 @@ named!(
     map!(take!(ADDRESS_LENGTH), to_ip_address)
 );
 
-impl IPv4 {
+impl<'a> IPv4<'a> {
     pub fn dst_ip(&self) -> &std::net::IpAddr {
         &self.dst_ip
     }
@@ -42,9 +58,9 @@ impl IPv4 {
     pub fn protocol(&self) -> &InternetProtocolId {
         &self.protocol
     }
-    pub fn payload(&self) -> &std::vec::Vec<u8> { &self.payload }
+    pub fn payload(&self) -> &'a [u8] { &self.payload }
 
-    fn parse_ipv4(input: &[u8], version_and_length: u8) -> IResult<&[u8], IPv4> {
+    fn parse_ipv4<'b>(input: &'b [u8], version_and_length: u8) -> IResult<&'b [u8], IPv4<'b>> {
         let header_length = (version_and_length  & 0x0F) * 4;
 
         trace!("Header Length={}", header_length);
@@ -73,7 +89,7 @@ impl IPv4 {
                     flags: flags,
                     ttl: ttl,
                     protocol: proto,
-                    payload: payload.into()
+                    payload: payload
                 }
             )
         )
@@ -85,7 +101,7 @@ impl IPv4 {
         flags: u16,
         ttl: u8,
         protocol: InternetProtocolId,
-        payload: std::vec::Vec<u8>
+        payload: &'a [u8]
     ) -> IPv4 {
         IPv4 {
             dst_ip: std::net::IpAddr::V4(dst_ip),
@@ -97,7 +113,7 @@ impl IPv4 {
         }
     }
 
-    pub fn parse(input: &[u8]) -> IResult<&[u8], IPv4> {
+    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], IPv4<'b>> {
         trace!("Available={}", input.len());
 
         be_u8(input).and_then(|r| {
@@ -106,20 +122,20 @@ impl IPv4 {
             if version == 4 {
                 IPv4::parse_ipv4(rem, version_and_length)
             } else {
-                Err(Err::convert(Err::Error(error_position!(input, ErrorKind::CondReduce::<u32>))))
+                Err(NomError::convert(NomError::Error(error_position!(input, NomErrorKind::CondReduce::<u32>))))
             }
         })
     }
 }
 
-impl TryFrom<IPv4> for Layer3FlowInfo {
+impl<'a> TryFrom<IPv4<'a>> for Layer3FlowInfo {
     type Error = errors::Error;
 
-    fn try_from(value: IPv4) -> Result<Self, Self::Error> {
-        debug!("Creating flow info from {:?}", value.protocol);
+    fn try_from(value: IPv4<'a>) -> Result<Self, Self::Error> {
+        debug!("Creating stream info from {:?}", value.protocol);
         let l4 = match value.protocol.clone() {
             InternetProtocolId::Tcp => {
-                layer4::tcp::Tcp::parse(value.payload())
+                Tcp::parse(value.payload())
                     .map_err(|e| {
                         let err: Self::Error = e.into();
                         err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
@@ -133,7 +149,7 @@ impl TryFrom<IPv4> for Layer3FlowInfo {
                 })
             }
             InternetProtocolId::Udp => {
-                layer4::udp::Udp::parse(value.payload())
+                Udp::parse(value.payload())
                     .map_err(|e| {
                         let err: Self::Error = e.into();
                         err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))

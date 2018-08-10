@@ -1,15 +1,20 @@
-use super::prelude::*;
-
-use self::nom::*;
-use self::layer3::{
-    Layer3,
-    Layer3FlowInfo,
-    ipv4::*
+use crate::{
+    prelude::*,
+    layer2::Layer2FlowInfo,
+    layer3::{
+        Layer3,
+        Layer3FlowInfo,
+        ipv4::*,
+        ipv6::*
+    }
 };
 
-use std;
-use std::convert::TryFrom;
-use super::Layer2FlowInfo;
+use nom::*;
+
+use std::{
+    self,
+    convert::TryFrom
+};
 
 const ETHERNET_PAYLOAD: u16 = 1500u16;
 const VLAN_LENGTH: usize = 4;
@@ -68,12 +73,12 @@ impl VlanTag {
     }
 }
 
-pub struct Ethernet {
+pub struct Ethernet<'a> {
     dst_mac: MacAddress,
     src_mac: MacAddress,
     ether_type: EthernetTypeId,
     vlans: std::vec::Vec<VlanTag>,
-    payload: std::vec::Vec<u8>
+    payload: &'a [u8]
 }
 
 fn to_mac_address(i: &[u8]) -> MacAddress {
@@ -82,7 +87,7 @@ fn to_mac_address(i: &[u8]) -> MacAddress {
 
 named!(mac_address<&[u8], MacAddress>, map!(take!(MAC_LENGTH), to_mac_address));
 
-impl Ethernet {
+impl<'a> Ethernet<'a> {
     pub fn dst_mac(&self) -> &MacAddress {
         &self.dst_mac
     }
@@ -108,8 +113,8 @@ impl Ethernet {
         Ethernet::vlans_to_vlan(&self.vlans)
     }
 
-    pub fn payload(&self) -> &std::vec::Vec<u8> {
-        &self.payload
+    pub fn payload(&self) -> &'a [u8] {
+        self.payload
     }
 
     fn parse_with_existing_vlan_tag<'b>(
@@ -118,7 +123,7 @@ impl Ethernet {
         src_mac: MacAddress,
         vlan_type: VlanTypeId,
         agg: std::vec::Vec<VlanTag>
-    ) -> nom::IResult<&'b [u8], Ethernet> {
+    ) -> nom::IResult<&'b [u8], Ethernet<'b>> {
         take!(input, VLAN_LENGTH).and_then(|r| {
             let (rem, vlan) = r;
             let mut agg_mut = agg;
@@ -130,12 +135,12 @@ impl Ethernet {
         })
     }
 
-    fn parse_vlan_tag(
-        input: &[u8],
+    fn parse_vlan_tag<'b>(
+        input: &'b [u8],
         dst_mac: MacAddress,
         src_mac: MacAddress,
         agg: std::vec::Vec<VlanTag>
-    ) -> nom::IResult<&[u8], Ethernet> {
+    ) -> nom::IResult<&'b [u8], Ethernet<'b>> {
         let vlan_res = do_parse!(input,
 
             vlan: map_opt!(be_u16, EthernetTypeId::new) >>
@@ -174,7 +179,7 @@ impl Ethernet {
         src_mac: MacAddress,
         ether_type: EthernetTypeId,
         vlans: std::vec::Vec<VlanTag>,
-        payload: std::vec::Vec<u8>
+        payload: &'a [u8]
     ) -> Ethernet {
         Ethernet {
             dst_mac,
@@ -185,7 +190,7 @@ impl Ethernet {
         }
     }
 
-    pub fn parse(input: &[u8]) -> nom::IResult<&[u8], Ethernet> {
+    pub fn parse<'b>(input: &'b [u8]) -> nom::IResult<&'b [u8], Ethernet> {
         trace!("Available={}", input.len());
 
         let r = do_parse!(input,
@@ -203,7 +208,7 @@ impl Ethernet {
     }
 }
 
-impl TryFrom<Ethernet> for Layer2FlowInfo {
+impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
     type Error = errors::Error;
 
     fn try_from(value: Ethernet) -> Result<Self, Self::Error> {
@@ -212,7 +217,7 @@ impl TryFrom<Ethernet> for Layer2FlowInfo {
         let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
             match l3_id {
                 Layer3Id::IPv4 => {
-                    layer3::ipv4::IPv4::parse(&value.payload)
+                    IPv4::parse(&value.payload)
                         .map_err(|e| {
                             let err: Self::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
@@ -226,7 +231,7 @@ impl TryFrom<Ethernet> for Layer2FlowInfo {
                     })
                 }
                 Layer3Id::IPv6 => {
-                    layer3::ipv6::IPv6::parse(&value.payload)
+                    IPv6::parse(&value.payload)
                         .map_err(|e| {
                             let err: Self::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
@@ -356,7 +361,7 @@ mod tests {
 
         assert!(rem.is_empty());
 
-        let info = Layer2FlowInfo::try_from(l2).expect("Could not convert to layer 2 flow info");
+        let info = Layer2FlowInfo::try_from(l2).expect("Could not convert to layer 2 stream info");
 
         assert_eq!(info.layer3.layer4.src_port, 50871);
         assert_eq!(info.layer3.layer4.dst_port, 80);

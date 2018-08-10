@@ -1,23 +1,35 @@
-use super::prelude::*;
-use super::{InternetProtocolId, Layer3FlowInfo};
-
-use self::nom::*;
-use self::layer4::{
-    Layer4,
-    Layer4FlowInfo,
-    tcp::*,
-    udp::*};
+use crate::{
+    prelude::*,
+    layer3::{
+        InternetProtocolId,
+        Layer3FlowInfo
+    },
+    layer4::{
+        Layer4,
+        Layer4FlowInfo,
+        tcp::*,
+        udp::*
+    }
+};
+use nom::{
+    be_u8,
+    be_u16,
+    Convert,
+    Err as NomError,
+    ErrorKind as NomErrorKind,
+    IResult
+};
 use std;
 use std::convert::TryFrom;
 
 const ADDRESS_LENGTH: usize = 16;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
-pub struct IPv6 {
+pub struct IPv6<'a> {
     dst_ip: std::net::IpAddr,
     src_ip: std::net::IpAddr,
     protocol: InternetProtocolId,
-    payload: std::vec::Vec<u8>
+    payload: &'a [u8]
 }
 
 fn to_ip_address(i: &[u8]) -> std::net::IpAddr {
@@ -30,7 +42,7 @@ named!(
     map!(take!(ADDRESS_LENGTH), to_ip_address)
 );
 
-impl IPv6 {
+impl<'a> IPv6<'a> {
     pub fn dst_ip(&self) -> &std::net::IpAddr {
         &self.dst_ip
     }
@@ -40,13 +52,13 @@ impl IPv6 {
     pub fn protocol(&self) -> &InternetProtocolId {
         &self.protocol
     }
-    pub fn payload(&self) -> &std::vec::Vec<u8> { &self.payload }
+    pub fn payload(&self) -> &'a [u8] { &self.payload }
 
-    fn parse_next_header(
-        input: &[u8],
+    fn parse_next_header<'b>(
+        input: &'b [u8],
         payload_length: u16,
         next_header: InternetProtocolId
-    ) -> IResult<&[u8], IPv6> {
+    ) -> IResult<&'b [u8], IPv6<'b>> {
         if InternetProtocolId::has_next_option(next_header.clone()) {
             let (rem, h) = do_parse!(input,
 
@@ -76,10 +88,10 @@ impl IPv6 {
         }
     }
 
-    fn parse_ipv6(input: &[u8]) -> IResult<&[u8], IPv6> {
+    fn parse_ipv6<'b>(input: &'b [u8]) -> IResult<&'b [u8], IPv6<'b>> {
         let (rem, (payload_length, next_header)) = do_parse!(input,
 
-            _f: take!(3) >> //version and flow label
+            _f: take!(3) >> //version and stream label
             p: be_u16 >>
             h: map_opt!(be_u8, InternetProtocolId::new) >>
 
@@ -95,7 +107,7 @@ impl IPv6 {
         dst_ip: std::net::Ipv6Addr,
         src_ip: std::net::Ipv6Addr,
         protocol: InternetProtocolId,
-        payload: std::vec::Vec<u8>
+        payload: &'a [u8]
     ) -> IPv6 {
         IPv6 {
             dst_ip: std::net::IpAddr::V6(dst_ip),
@@ -105,7 +117,7 @@ impl IPv6 {
         }
     }
 
-    pub fn parse(input: &[u8]) -> IResult<&[u8], IPv6> {
+    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], IPv6<'b>> {
         trace!("Available={}", input.len());
 
         be_u8(input).and_then(|r| {
@@ -114,20 +126,20 @@ impl IPv6 {
             if version == 6 {
                 IPv6::parse_ipv6(rem)
             } else {
-                Err(Err::convert(Err::Error(error_position!(input, ErrorKind::CondReduce::<u32>))))
+                Err(NomError::convert(NomError::Error(error_position!(input, NomErrorKind::CondReduce::<u32>))))
             }
         })
     }
 }
 
-impl TryFrom<IPv6> for Layer3FlowInfo {
+impl<'a> TryFrom<IPv6<'a>> for Layer3FlowInfo {
     type Error = errors::Error;
 
-    fn try_from(value: IPv6) -> Result<Self, Self::Error> {
-        debug!("Creating flow info from {:?}", value.protocol);
+    fn try_from(value: IPv6<'a>) -> Result<Self, Self::Error> {
+        debug!("Creating stream info from {:?}", value.protocol);
         let l4 = match value.protocol.clone() {
             InternetProtocolId::Tcp => {
-                layer4::tcp::Tcp::parse(value.payload())
+                Tcp::parse(value.payload())
                     .map_err(|e| {
                         let err: Self::Error = e.into();
                         err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
@@ -141,7 +153,7 @@ impl TryFrom<IPv6> for Layer3FlowInfo {
                 })
             }
             InternetProtocolId::Udp => {
-                layer4::udp::Udp::parse(value.payload())
+                Udp::parse(value.payload())
                     .map_err(|e| {
                         let err: Self::Error = e.into();
                         err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))

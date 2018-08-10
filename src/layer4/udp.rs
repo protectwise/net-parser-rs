@@ -1,33 +1,38 @@
-use super::prelude::*;
-use super::Layer4FlowInfo;
+use crate::{
+    prelude::*,
+    layer4::Layer4FlowInfo
+};
 
-use self::nom::*;
+use nom::{
+    be_u16,
+    IResult
+};
 use std;
 use std::convert::TryFrom;
 
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
-pub struct Udp {
+pub struct Udp<'a> {
     dst_port: u16,
     src_port: u16,
-    payload: std::vec::Vec<u8>
+    payload: &'a [u8]
 }
 
-impl Udp {
+impl<'a> Udp<'a> {
     pub fn dst_port(&self) -> u16 {
         self.dst_port
     }
     pub fn src_port(&self) -> u16 {
         self.src_port
     }
-    pub fn payload(&self) -> &std::vec::Vec<u8> {
+    pub fn payload(&self) -> &'a [u8] {
         &self.payload
     }
 
-    pub fn new<'b>(
+    pub fn new(
         dst_port: u16,
         src_port: u16,
-        payload: std::vec::Vec<u8>
+        payload: &'a [u8]
     ) -> Udp {
         Udp {
             dst_port,
@@ -36,7 +41,7 @@ impl Udp {
         }
     }
 
-    pub fn parse(input: &[u8]) -> IResult<&[u8], Udp> {
+    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], Udp<'b>> {
         trace!("Available={}", input.len());
 
         do_parse!(input,
@@ -53,17 +58,17 @@ impl Udp {
                 Udp {
                     dst_port: dst_port,
                     src_port: src_port,
-                    payload: payload.into()
+                    payload: payload
                 }
             )
         )
     }
 }
 
-impl TryFrom<Udp> for Layer4FlowInfo {
+impl<'a> TryFrom<Udp<'a>> for Layer4FlowInfo {
     type Error = errors::Error;
 
-    fn try_from(value: Udp) -> Result<Self, Self::Error> {
+    fn try_from(value: Udp<'a>) -> Result<Self, Self::Error> {
         Ok(Layer4FlowInfo {
             dst_port: value.dst_port,
             src_port: value.src_port
@@ -104,7 +109,7 @@ mod tests {
 
         assert_eq!(l4.dst_port(), 50871);
         assert_eq!(l4.src_port(), 80);
-        assert_eq!(l4.payload().as_slice(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
+        assert_eq!(l4.payload(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
             0x00u8, 0x00u8, 0x00u8, 0x00u8,
