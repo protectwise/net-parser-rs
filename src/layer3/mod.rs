@@ -32,7 +32,7 @@ pub enum InternetProtocolId {
     AuthenticationHeader,
     HopByHop,
     EncapsulatingSecurityPayload,
-    //ICMP,
+    ICMP,
     IPv6Route,
     IPv6Fragment,
     IPv6NoNext,
@@ -45,7 +45,7 @@ impl InternetProtocolId {
     pub fn new(value: u8) -> Option<InternetProtocolId> {
         match value {
             0 => Some(InternetProtocolId::HopByHop),
-            //1 -> Some(InternetProtocolId::ICMP)
+            1 => Some(InternetProtocolId::ICMP),
             6 => Some(InternetProtocolId::Tcp),
             17 => Some(InternetProtocolId::Udp),
             43 => Some(InternetProtocolId::IPv6Route),

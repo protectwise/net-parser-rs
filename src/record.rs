@@ -7,7 +7,7 @@ use crate::{
     flow::{
         Device,
         Flow,
-        FlowRecord
+        FlowExtraction
     },
     layer2::{
         Layer2,
@@ -62,8 +62,7 @@ impl<'a> PcapRecord<'a> {
     pub fn original_length(&self) -> u32 {
         self.original_length
     }
-    pub fn payload(&self) -> &'a [u8] { &self.payload }
-    pub fn flow(&self) -> &Option<Flow> { &self.flow }
+    pub fn payload(&self) -> &[u8] { &self.payload }
 
     ///
     /// Convert a packet time (seconds and partial second microseconds) to a system time (offset from epoch)
@@ -82,8 +81,9 @@ impl<'a> PcapRecord<'a> {
 
         loop {
             if let Some(mut r) = records.pop() {
-                match r.with_flow() {
-                    Ok(_) => {
+                match r.extract_flow() {
+                    Ok(f) => {
+                        r.flow = Some(f);
                         results.push(r);
                     },
                     Err(e) => {
@@ -133,38 +133,11 @@ impl<'a> PcapRecord<'a> {
             )
         )
     }
+}
 
-    pub fn with_flow(&mut self) -> Result<&mut Self, Error> {
-        trace!("Creating stream from payload of {}B", self.payload.len());
-
-        let l2 = Ethernet::parse(self.payload())
-            .map_err(Error::from)
-            .and_then(|r| {
-            let (rem, l2) = r;
-            if rem.is_empty() {
-                Layer2FlowInfo::try_from(l2)
-            } else {
-                Err(Error::from_kind(ErrorKind::IncompleteParse(rem.len())))
-            }
-        })?;
-
-        let flow = Flow::new(
-            Device::new(
-                l2.src_mac,
-                l2.layer3.src_ip,
-                l2.layer3.layer4.src_port
-            ),
-            Device::new(
-                l2.dst_mac,
-                l2.layer3.dst_ip,
-                l2.layer3.layer4.dst_port
-            ),
-            l2.vlan
-        );
-
-        self.flow = Some(flow);
-
-        Ok(self)
+impl<'a> FlowExtraction for PcapRecord<'a> {
+    fn payload(&self) -> &[u8] {
+        self.payload
     }
 }
 
@@ -281,11 +254,8 @@ mod tests {
 
         assert!(rem.is_empty());
 
-        if let Some(ref flow) = record.with_flow().expect("Could not extract stream").flow() {
-            assert_eq!(flow.source().port(), 50871);
-            assert_eq!(flow.destination().port(), 80);
-        } else {
-            panic!("No flow set");
-        }
+        let flow = record.extract_flow().expect("Could not extract stream");
+        assert_eq!(flow.source().port(), 50871);
+        assert_eq!(flow.destination().port(), 80);
     }
 }

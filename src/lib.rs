@@ -197,7 +197,13 @@ mod tests {
     extern crate env_logger;
     extern crate test;
 
-    use super::*;
+    use crate::{
+        prelude::*,
+        CaptureParser,
+        flow::FlowExtraction,
+        record::PcapRecord
+    };
+    use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
     use self::test::Bencher;
@@ -272,14 +278,10 @@ mod tests {
         assert!(rem.is_empty());
 
         let mut record = records.pop().unwrap();
-        record.with_flow().expect("Failed to convert record");
+        let flow = record.extract_flow().expect("Failed to extract flow");
 
-        if let Some(ref flow) = record.flow() {
-            assert_eq!(flow.source().port(), 50871);
-            assert_eq!(flow.destination().port(), 80);
-        } else {
-            panic!("No flow set")
-        }
+        assert_eq!(flow.source().port(), 50871);
+        assert_eq!(flow.destination().port(), 80);
     }
 
     #[test]
@@ -313,7 +315,7 @@ mod tests {
         assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
 
-        let converted_records = record::PcapRecord::convert_records(records);
+        let converted_records = PcapRecord::convert_records(records);
 
         assert_eq!(converted_records.len(), 129643);
     }
@@ -352,7 +354,7 @@ mod tests {
             assert_eq!(header.endianness(), Endianness::Little);
             assert_eq!(records.len(), 246137);
 
-            let converted_records = record::PcapRecord::convert_records(records);
+            let converted_records = PcapRecord::convert_records(records);
 
             assert_eq!(converted_records.len(), 129643);
         });

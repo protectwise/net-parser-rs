@@ -15,6 +15,11 @@ use crate::{
     record::PcapRecord
 };
 
+use std::{
+    self,
+    convert::TryFrom
+};
+
 ///
 /// Representation of a device on the network, with the mac, ip, and port involved in a connection
 ///
@@ -55,11 +60,39 @@ impl Device {
 ///
 /// Trait that provides necessary information to indicate a flow
 ///
-pub trait FlowRecord<'a> {
-    fn timestamp(&self) -> &std::time::SystemTime;
-    fn actual_length(&self) -> u32;
-    fn original_length(&self) -> u32;
-    fn payload(&self) -> &'a [u8];
+pub trait FlowExtraction {
+    fn payload(&self) -> &[u8];
+
+    fn extract_flow(&self) -> Result<Flow, Error> {
+        trace!("Creating stream from payload of {}B", self.payload().len());
+
+        let l2 = Ethernet::parse(self.payload())
+            .map_err(Error::from)
+            .and_then(|r| {
+                let (rem, l2) = r;
+                if rem.is_empty() {
+                    Layer2FlowInfo::try_from(l2)
+                } else {
+                    Err(Error::from_kind(ErrorKind::IncompleteParse(rem.len())))
+                }
+            })?;
+
+        let flow = Flow::new(
+            Device::new(
+                l2.src_mac,
+                l2.layer3.src_ip,
+                l2.layer3.layer4.src_port
+            ),
+            Device::new(
+                l2.dst_mac,
+                l2.layer3.dst_ip,
+                l2.layer3.layer4.dst_port
+            ),
+            l2.vlan
+        );
+
+        Ok(flow)
+    }
 }
 
 ///

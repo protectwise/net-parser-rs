@@ -1,7 +1,10 @@
 use crate::{
     prelude::*,
     errors::Error,
-    record::PcapRecord
+    flow::{
+        Flow,
+        FlowExtraction
+    }
 };
 
 use futures::{
@@ -19,33 +22,39 @@ use std::{
     }
 };
 
-pub struct FlowStream<'a, S>
-    where S: Stream<Item=PcapRecord<'a>>
-{
-    inner: S,
-    flow_phantom: &'a std::marker::PhantomData<()>
+pub struct FlowRecord<R> where R: FlowExtraction {
+    record: R,
+    flow: Flow
 }
 
-impl<'a, S> FlowStream<'a, S>
-    where S: Stream<Item=PcapRecord<'a>>
+pub struct FlowStream<S>
+    where S: Stream,
+    S::Item: FlowExtraction
+{
+    inner: S
+}
+
+impl<S> FlowStream<S>
+    where S: Stream,
+    S::Item: FlowExtraction
 {
     unsafe_pinned!(inner: S);
 
     pub fn new(
         inner: S
-    ) -> FlowStream<'a, S>
+    ) -> FlowStream<S>
     {
         FlowStream {
-            inner: inner,
-            flow_phantom: &std::marker::PhantomData
+            inner: inner
         }
     }
 }
 
-impl<'a, S> Stream for FlowStream<'a, S>
-    where S: Stream<Item=PcapRecord<'a>>
+impl<S> Stream for FlowStream<S>
+    where S: Stream,
+    S::Item: FlowExtraction
 {
-    type Item=PcapRecord<'a>;
+    type Item=FlowRecord<S::Item>;
 
     fn poll_next(
         mut self: PinMut<Self>,
@@ -57,12 +66,16 @@ impl<'a, S> Stream for FlowStream<'a, S>
                 Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(Some(mut v)) => {
-                    match v.with_flow() {
+                    match v.extract_flow() {
                         Err(e) => {
                             debug!("Failed to convert value: {:?}", e)
                         }
-                        Ok(_) => {
-                            return Poll::Ready(Some(v))
+                        Ok(f) => {
+                            let res = FlowRecord {
+                                record: v,
+                                flow: f
+                            };
+                            return Poll::Ready(Some(res))
                         }
                     }
                 }
@@ -72,8 +85,9 @@ impl<'a, S> Stream for FlowStream<'a, S>
 }
 
 pub trait WithExtraction: Stream {
-    fn extract<'a>(self) -> FlowStream<'a, Self>
-        where Self: Stream<Item=PcapRecord<'a>> + Sized
+    fn extract<'a>(self) -> FlowStream<Self>
+        where Self: Stream + Sized,
+        Self::Item: FlowExtraction
     {
         FlowStream::new(self)
     }
