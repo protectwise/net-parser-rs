@@ -1,27 +1,16 @@
 #![allow(unused)]
-#![feature(test, futures_api, pin, arbitrary_self_types, try_from)]
+#![feature(test, try_from)]
 #![recursion_limit="128"]
 ///! net-parser-rs
 ///!
 ///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
 ///! associated records.
 ///!
-#[macro_use] pub extern crate arrayref;
+#[macro_use] extern crate arrayref;
 #[macro_use] extern crate error_chain;
-#[macro_use] pub extern crate futures;
+#[macro_use] extern crate futures;
 #[macro_use(debug, info, error, log, trace, warn)] extern crate log;
-#[macro_use] pub extern crate nom;
-#[macro_use] extern crate pin_utils;
-
-pub mod prelude {
-    pub use super::{
-        arrayref::*,
-        common::*,
-        futures,
-        nom,
-        errors
-    };
-}
+#[macro_use] extern crate nom;
 
 pub mod errors {
     use std;
@@ -98,7 +87,12 @@ pub mod layer4;
 pub mod record;
 pub mod stream;
 
-use self::errors::*;
+use crate::{
+    errors::{
+        Error,
+        ErrorKind
+    }
+};
 use nom::*;
 
 ///
@@ -194,11 +188,7 @@ impl CaptureParser {
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
-    extern crate test;
-
     use crate::{
-        prelude::*,
         CaptureParser,
         flow::FlowExtraction,
         record::PcapRecord
@@ -206,7 +196,7 @@ mod tests {
     use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
-    use self::test::Bencher;
+    use test::Bencher;
 
     const RAW_DATA: &'static [u8] = &[
         0x4du8, 0x3c, 0x2b, 0x1au8, //magic number

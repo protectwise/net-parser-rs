@@ -1,5 +1,14 @@
 use crate::{
-    prelude::*,
+    common::{
+        MAC_LENGTH,
+        MacAddress,
+        Vlan
+    },
+    errors::{
+        self,
+        Error,
+        ErrorKind
+    },
     layer2::Layer2FlowInfo,
     layer3::{
         Layer3,

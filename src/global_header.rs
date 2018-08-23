@@ -1,8 +1,4 @@
-use crate::prelude::*;
-
 use nom::*;
-
-use std::mem::PinMut;
 
 const MAGIC_NUMBER: u32 = 0xA1B2C3D4u32;
 #[cfg(target_endian = "little")]
@@ -70,8 +66,6 @@ impl GlobalHeader {
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
-
     use super::*;
 
     #[cfg(target_endian = "little")]

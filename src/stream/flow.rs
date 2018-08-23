@@ -1,5 +1,4 @@
 use crate::{
-    prelude::*,
     errors::Error,
     flow::{
         Flow,
@@ -8,6 +7,8 @@ use crate::{
 };
 
 use futures::{
+    self,
+    Async,
     Poll,
     Stream
 };
@@ -16,9 +17,6 @@ use std::{
     convert::{
         From,
         TryInto
-    },
-    mem::{
-        PinMut
     }
 };
 
@@ -38,8 +36,6 @@ impl<S> FlowStream<S>
     where S: Stream,
     S::Item: FlowExtraction
 {
-    unsafe_pinned!(inner: S);
-
     pub fn new(
         inner: S
     ) -> FlowStream<S>
@@ -55,30 +51,27 @@ impl<S> Stream for FlowStream<S>
     S::Item: FlowExtraction
 {
     type Item=FlowRecord<S::Item>;
+    type Error=S::Error;
 
-    fn poll_next(
-        mut self: PinMut<Self>,
-        cx: &mut std::task::Context,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll(
+        &mut self
+    ) -> Poll<Option<Self::Item>, Self::Error> {
         loop {
-            let v = self.inner().poll_next(cx);
-            match v {
-                Poll::Ready(None) => return Poll::Ready(None),
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Some(mut v)) => {
-                    match v.extract_flow() {
-                        Err(e) => {
-                            debug!("Failed to convert value: {:?}", e)
-                        }
-                        Ok(f) => {
-                            let res = FlowRecord {
-                                record: v,
-                                flow: f
-                            };
-                            return Poll::Ready(Some(res))
-                        }
+            if let Some(mut v) = try_ready!(self.inner.poll()) {
+                match v.extract_flow() {
+                    Err(e) => {
+                        debug!("Failed to convert value: {:?}", e)
+                    }
+                    Ok(f) => {
+                        let res = FlowRecord {
+                            record: v,
+                            flow: f
+                        };
+                        return Ok(Async::Ready(Some(res)))
                     }
                 }
+            } else {
+                return Ok(Async::Ready(None));
             }
         }
     }
@@ -97,22 +90,19 @@ impl<T: ?Sized> WithExtraction for T where T: Stream {}
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
-    extern crate test;
-
     use super::*;
-    use super::super::super::{
+
+    use crate::{
         record::PcapRecord,
         CaptureParser
     };
 
     use futures::{
-        executor::ThreadPool,
         stream as futures_stream,
-        StreamExt
+        Future
     };
     use nom::Endianness;
-    use self::test::Bencher;
+    use test::Bencher;
     use std::{
         io::Read,
         path::PathBuf
@@ -133,13 +123,11 @@ mod tests {
         assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
 
-        let mut rt = ThreadPool::new().expect("Failed to create threadpool");
-
-        let fut_flows = futures_stream::iter(records)
+        let fut_flows = futures_stream::iter_ok::<Vec<PcapRecord>, Error>(records)
             .extract()
-            .collect::<Vec<_>>();
+            .collect();
 
-        let flows = rt.run(fut_flows);
+        let flows = fut_flows.wait().expect("Failed to run");
 
         assert_eq!(flows.len(), 129643);
     }
@@ -160,13 +148,11 @@ mod tests {
             assert_eq!(header.endianness(), Endianness::Little);
             assert_eq!(records.len(), 246137);
 
-            let mut rt = ThreadPool::new().expect("Failed to create threadpool");
-
-            let fut_flows = futures_stream::iter(records)
+            let fut_flows = futures_stream::iter_ok::<Vec<PcapRecord>, Error>(records)
                 .extract()
-                .collect::<Vec<_>>();
+                .collect();
 
-            let flows = rt.run(fut_flows);
+            let flows = fut_flows.wait().expect("Failed to run");
 
             assert_eq!(flows.len(), 129643);
         });

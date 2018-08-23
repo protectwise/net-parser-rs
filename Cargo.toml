@@ -10,10 +10,10 @@ edition = "2018"
 arrayref = "~0.3"
 nom = "~4.0"
 error-chain = "~0.12"
-futures-preview = "0.3.0-alpha.2"
+futures = "~0.1"
 log = "~0.4"
-pin-utils = "0.1.0-alpha.1"
 
 [dev-dependencies]
 env_logger = "*"
 hex-slice = "~0.1"
+tokio = "~0.1"
