@@ -90,6 +90,8 @@ impl<T: ?Sized> WithExtraction for T where T: Stream {}
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
+
     use super::*;
 
     use crate::{
@@ -102,7 +104,7 @@ mod tests {
         Future
     };
     use nom::Endianness;
-    use test::Bencher;
+    use self::test::Bencher;
     use std::{
         io::Read,
         path::PathBuf

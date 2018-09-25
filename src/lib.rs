@@ -188,6 +188,8 @@ impl CaptureParser {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
+
     use crate::{
         CaptureParser,
         flow::FlowExtraction,
@@ -196,7 +198,7 @@ mod tests {
     use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
-    use test::Bencher;
+    use self::test::Bencher;
 
     const RAW_DATA: &'static [u8] = &[
         0x4du8, 0x3c, 0x2b, 0x1au8, //magic number
