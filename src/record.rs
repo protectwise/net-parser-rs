@@ -15,12 +15,11 @@ use crate::{
     }
 };
 
+use log::*;
 use nom::{
-    be_u32,
-    Endianness,
+    *,
     Err as NomError,
-    ErrorKind as NomErrorKind,
-    le_u32
+    ErrorKind as NomErrorKind
 };
 
 use std::{

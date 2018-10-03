@@ -8,10 +8,12 @@ use crate::{
 
 use futures::{
     self,
+    try_ready,
     Async,
     Poll,
     Stream
 };
+use log::*;
 use std::{
     self,
     convert::{

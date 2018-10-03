@@ -1,3 +1,5 @@
+use log::*;
+
 use crate::{
     common::{
         MAC_LENGTH,

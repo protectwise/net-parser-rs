@@ -16,13 +16,12 @@ use crate::{
     }
 };
 
+use arrayref::array_ref;
+use log::*;
 use nom::{
-    be_u8,
-    be_u16,
-    Convert,
+    *,
     Err as NomError,
-    ErrorKind as NomErrorKind,
-    IResult
+    ErrorKind as NomErrorKind
 };
 
 use std::{

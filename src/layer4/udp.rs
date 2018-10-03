@@ -7,10 +7,8 @@ use crate::{
     layer4::Layer4FlowInfo
 };
 
-use nom::{
-    be_u16,
-    IResult
-};
+use log::*;
+use nom::*;
 use std;
 use std::convert::TryFrom;
 

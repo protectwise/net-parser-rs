@@ -6,16 +6,12 @@
 ///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
 ///! associated records.
 ///!
-#[macro_use] extern crate arrayref;
 #[macro_use] extern crate error_chain;
-#[macro_use] extern crate futures;
-#[macro_use(debug, info, error, log, trace, warn)] extern crate log;
-#[macro_use] extern crate nom;
 
 pub mod errors {
     use std;
-    use super::layer2;
-    use super::layer3;
+    use crate::layer2;
+    use crate::layer3;
 
     // Create the Error, ErrorKind, ResultExt, and Result types
     error_chain! {
@@ -58,19 +54,19 @@ pub mod errors {
         }
     }
 
-    impl<I, E> From<super::nom::Err<I, E>> for Error {
-        fn from(err: super::nom::Err<I, E>) -> Error {
+    impl<I, E> From<nom::Err<I, E>> for Error {
+        fn from(err: nom::Err<I, E>) -> Error {
             match err {
-                super::nom::Err::Incomplete(super::nom::Needed::Unknown) => {
+                nom::Err::Incomplete(nom::Needed::Unknown) => {
                     Error::from_kind(ErrorKind::NomIncomplete("Unknown".to_string()))
                 }
-                super::nom::Err::Incomplete(super::nom::Needed::Size(sz)) => {
+                nom::Err::Incomplete(nom::Needed::Size(sz)) => {
                     Error::from_kind(ErrorKind::NomIncomplete(format!("{}", sz)))
                 }
-                super::nom::Err::Error(super::nom::simple_errors::Context::Code(_, k)) => {
+                nom::Err::Error(nom::simple_errors::Context::Code(_, k)) => {
                     Error::from_kind(ErrorKind::NomError(k.description().to_string()))
                 }
-                super::nom::Err::Failure(super::nom::simple_errors::Context::Code(_, k)) => {
+                nom::Err::Failure(nom::simple_errors::Context::Code(_, k)) => {
                     Error::from_kind(ErrorKind::NomError(k.description().to_string()))
                 }
             }
@@ -93,6 +89,7 @@ use crate::{
         ErrorKind
     }
 };
+use log::*;
 use nom::*;
 
 ///
@@ -100,7 +97,6 @@ use nom::*;
 ///
 /// ```text
 ///    #![feature(try_from)]
-///    extern crate net_parser_rs;
 ///
 ///    use net_parser_rs::NetworkParser;
 ///    use std::*;

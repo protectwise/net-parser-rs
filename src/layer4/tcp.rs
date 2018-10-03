@@ -8,13 +8,11 @@ use crate::{
     layer4::Layer4FlowInfo
 };
 
+use log::*;
 use nom::{
-    be_u16,
-    be_u32,
+    *,
     Err as NomError,
-    ErrorKind as NomErrorKind,
-    IResult,
-    rest
+    ErrorKind as NomErrorKind
 };
 use std;
 use std::convert::TryFrom;
