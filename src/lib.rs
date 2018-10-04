@@ -54,7 +54,7 @@ pub mod errors {
         }
     }
 
-    impl<I, E> From<nom::Err<I, E>> for Error {
+    impl<I, E> From<nom::Err<I, E>> for Error where I: std::fmt::Debug, E: std::fmt::Debug {
         fn from(err: nom::Err<I, E>) -> Error {
             match err {
                 nom::Err::Incomplete(nom::Needed::Unknown) => {
@@ -63,11 +63,11 @@ pub mod errors {
                 nom::Err::Incomplete(nom::Needed::Size(sz)) => {
                     Error::from_kind(ErrorKind::NomIncomplete(format!("{}", sz)))
                 }
-                nom::Err::Error(nom::simple_errors::Context::Code(_, k)) => {
-                    Error::from_kind(ErrorKind::NomError(k.description().to_string()))
+                nom::Err::Error(c) => {
+                    Error::from_kind(ErrorKind::NomError(format!("{:?}", c)))
                 }
-                nom::Err::Failure(nom::simple_errors::Context::Code(_, k)) => {
-                    Error::from_kind(ErrorKind::NomError(k.description().to_string()))
+                nom::Err::Failure(c) => {
+                    Error::from_kind(ErrorKind::NomError(format!("{:?}", c)))
                 }
             }
         }
