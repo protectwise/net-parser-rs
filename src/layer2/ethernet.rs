@@ -1,3 +1,4 @@
+use arrayref::array_ref;
 use crate::{
     common::{
         MAC_LENGTH,
@@ -9,20 +10,24 @@ use crate::{
         Error,
         ErrorKind
     },
-    layer2::Layer2FlowInfo,
+    layer2::{
+        Layer2FlowInfo,
+        Layer2Protocol,
+    },
     layer3::{
+        ipv4::*,
+        ipv6::*,
         Layer3,
         Layer3FlowInfo,
+        Layer3Protocol,
         ipv4::*,
         ipv6::*,
         arp::*
-    }
+    },
+    LayerExtraction
 };
-
-use arrayref::array_ref;
 use log::*;
 use nom::*;
-
 use std::{
     self,
     convert::TryFrom
@@ -232,38 +237,44 @@ impl<'a> Ethernet<'a> {
     }
 }
 
-impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
-    type Error = errors::Error;
+impl<'a> From<Ethernet<'a>> for Layer2FlowInfo {
 
-    fn try_from(value: Ethernet) -> Result<Self, Self::Error> {
+    fn from(value: Ethernet) -> Self {
         let ether_type = value.ether_type;
         debug!("Creating from layer 3 type {:?} using payload of {}B", ether_type, value.payload.len());
+
+        let mut protocol = Layer3Protocol::Unknown;
+
         let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
             match l3_id {
                 Layer3Id::IPv4 => {
+                    protocol = Layer3Protocol::IPv4;
+
                     IPv4::parse(&value.payload)
                         .map_err(|e| {
                             error!("Error parsing ipv4 {:?}", e);
-                            let err: Self::Error = e.into();
+                            let err: errors::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                         }).and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3)
+                            Ok(Layer3FlowInfo::from(l3))
                         } else {
                             Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
                         }
                     })
                 }
                 Layer3Id::IPv6 => {
+                    protocol = Layer3Protocol::IPv6;
+
                     IPv6::parse(&value.payload)
-                        .map_err(|e| {
-                            let err: Self::Error = e.into();
+                      .map_err(|e| {
+                            let err: errors::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                         }).and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3)
+                            Ok(Layer3FlowInfo::from(l3))
                         } else {
                             Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
                         }
@@ -272,7 +283,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                 Layer3Id::Arp => {
                     Arp::parse(&value.payload)
                         .map_err(|e| {
-                            let err: Self::Error = e.into();
+                            let err: errors::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                         }).and_then(|r| {
                         let (rem, l3) = r;
@@ -289,14 +300,16 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
             }
         } else {
             Err(errors::Error::from_kind(errors::ErrorKind::EthernetType(ether_type)))
-        }?;
+        };
 
-        Ok(Layer2FlowInfo {
+        let l3_extraction = LayerExtraction::map_extraction(protocol, l3);
+
+        Layer2FlowInfo {
             src_mac: value.src_mac,
             dst_mac: value.dst_mac,
             vlan: Ethernet::vlans_to_vlan(&value.vlans),
-            layer3: l3
-        })
+            layer3: l3_extraction,
+        }
     }
 }
 
@@ -304,11 +317,11 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
 mod tests {
     extern crate env_logger;
     extern crate hex_slice;
-    use self::hex_slice::AsHex;
 
+    use self::hex_slice::AsHex;
     use super::*;
 
-    const PAYLOAD_RAW_DATA: &'static [u8] = &[
+    pub const PAYLOAD_RAW_DATA: &'static [u8] = &[
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
         0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
         0x00u8, 0x04u8, //payload ethernet
@@ -316,7 +329,7 @@ mod tests {
         0x01u8, 0x02u8, 0x03u8, 0x04u8
     ];
 
-    const TCP_RAW_DATA: &'static [u8] = &[
+    pub const TCP_RAW_DATA: &'static [u8] = &[
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
         0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
         0x08u8, 0x00u8, //ipv4
@@ -400,10 +413,12 @@ mod tests {
 
         assert!(rem.is_empty());
 
-        let info = Layer2FlowInfo::try_from(l2).expect("Could not convert to layer 2 stream info");
+        let layer2= Layer2FlowInfo::from(l2);
+        let layer3 = layer2.layer3.unwrap_flow();
+        let layer4 = layer3.layer4.unwrap_flow();
 
-        assert_eq!(info.layer3.layer4.src_port, 50871);
-        assert_eq!(info.layer3.layer4.dst_port, 80);
+        assert_eq!(layer4.src_port, 50871);
+        assert_eq!(layer4.dst_port, 80);
     }
 
     #[test]

@@ -1,8 +1,6 @@
-use std;
-
 pub const MAC_LENGTH: usize = 6;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct MacAddress(pub [u8; MAC_LENGTH]);
 
 pub type Vlan = u16;
@@ -21,6 +19,7 @@ impl std::fmt::Display for MacAddress {
         )
     }
 }
+
 
 #[cfg(test)]
 mod tests {

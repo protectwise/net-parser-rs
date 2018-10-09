@@ -4,12 +4,13 @@ use crate::{
         Error,
         ErrorKind
     },
-    layer4::Layer4FlowInfo
+    layer4::{
+        Layer4FlowInfo,
+        Layer4Protocol,
+    }
 };
-
 use log::*;
 use nom::*;
-use std;
 use std::convert::TryFrom;
 
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
@@ -67,14 +68,16 @@ impl<'a> Udp<'a> {
     }
 }
 
-impl<'a> TryFrom<Udp<'a>> for Layer4FlowInfo {
-    type Error = errors::Error;
+impl<'a> From<Udp<'a>> for Layer4FlowInfo {
+//    type Error = errors::Error;
 
-    fn try_from(value: Udp<'a>) -> Result<Self, Self::Error> {
-        Ok(Layer4FlowInfo {
+    fn from(value: Udp<'a>) -> Self {
+
+        Layer4FlowInfo {
             dst_port: value.dst_port,
-            src_port: value.src_port
-        })
+            src_port: value.src_port,
+            protocol: Layer4Protocol::Udp,
+        }
     }
 }
 
@@ -82,8 +85,8 @@ impl<'a> TryFrom<Udp<'a>> for Layer4FlowInfo {
 mod tests {
     extern crate env_logger;
     extern crate hex_slice;
-    use self::hex_slice::AsHex;
 
+    use self::hex_slice::AsHex;
     use super::*;
 
     const RAW_DATA: &'static [u8] = &[
