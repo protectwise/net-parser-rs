@@ -61,8 +61,8 @@ impl<'a> Vxlan<'a> {
         do_parse!(input.payload(),
             flags: u16!(endianness) >>
             group_policy_id: u16!(endianness) >>
-            network_identifier: u32!(endianness) >> // actually u24
-            //reserved: be_u8 >>
+            network_identifier: u32!(endianness) >> // actually u24 plus 8 reserved bits.
+            //reserved: be_u8 >> // accounted for in bytes captured under network_identifier
             payload: rest >> (
                 (flags, group_policy_id, network_identifier, payload)
             )
