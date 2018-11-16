@@ -5,6 +5,9 @@ authors = ["Danny Browning <danny.browning@protectwise.com>", "Eric Stevens <eri
 description = "Basic network parser leveraging Rust and nom for safe and efficient packet parsing. Design influenced by pktparse-rs."
 edition = "2018"
 license = "MIT"
+repository = "https://github.com/protectwise/net-parser-rs/"
+readme = "README.md"
+keywords=["pcap","packet","network"]
 
 [dependencies]
 arrayref = "~0.3"
