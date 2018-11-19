@@ -8,6 +8,7 @@ license = "MIT"
 repository = "https://github.com/protectwise/net-parser-rs/"
 readme = "README.md"
 keywords=["pcap","packet","network"]
+categories=["encoding","network-programming","parsing"]
 
 [dependencies]
 arrayref = "~0.3"
