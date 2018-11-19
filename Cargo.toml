@@ -10,10 +10,10 @@ nom = "~4.0"
 error-chain = "~0.12"
 futures = "~0.1"
 log = "~0.4"
-regex = "~1" # for tests
-hex = "~0.3.2" # for tests
 
 [dev-dependencies]
 env_logger = "*"
 hex-slice = "~0.1"
 tokio = "~0.1"
+regex = "~1"
+hex = "~0.3.2"
