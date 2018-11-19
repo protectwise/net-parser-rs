@@ -14,11 +14,6 @@ use nom::{
     IResult
 };
 
-pub enum MaybeVxlan<'a> {
-    Encapsulated(Vxlan<'a>),
-    NotEncapsulated(&'a Udp<'a>)
-}
-
 #[derive(Debug)]
 pub struct Vxlan<'a> {
     flags: u16,
