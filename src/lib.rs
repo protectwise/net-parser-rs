@@ -207,7 +207,7 @@ pub mod tests {
             let bytes = parse_hex_dump(r"
             # Comment line
             0090   34 35 36 37                                      4567
-        ").unwrap();
+        ").expect("Failed to parse bytes");
             let b = b"4567".to_vec().into_boxed_slice();
             assert_eq!(bytes.len(), 4)
         }
