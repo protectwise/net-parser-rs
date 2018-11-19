@@ -92,6 +92,7 @@ mod tests {
 
     #[test]
     fn encapsulated() {
+        // Packet sample came from https://www.cloudshark.org/captures/670aeb7bad79 
         let bytes = parse_hex_dump(r##"
             # Frame 3: 148 bytes on wire (1184 bits), 148 bytes captured (1184 bits) on interface 0
             # Ethernet II, Src: CadmusCo_ae:4d:62 (08:00:27:ae:4d:62), Dst: CadmusCo_f2:1d:8c (08:00:27:f2:1d:8c)
