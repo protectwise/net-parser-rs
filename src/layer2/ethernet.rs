@@ -14,7 +14,8 @@ use crate::{
         Layer3,
         Layer3FlowInfo,
         ipv4::*,
-        ipv6::*
+        ipv6::*,
+        arp::*
     }
 };
 
@@ -243,6 +244,20 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                 }
                 Layer3Id::IPv6 => {
                     IPv6::parse(&value.payload)
+                        .map_err(|e| {
+                            let err: Self::Error = e.into();
+                            err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                        }).and_then(|r| {
+                        let (rem, l3) = r;
+                        if rem.is_empty() {
+                            Layer3FlowInfo::try_from(l3)
+                        } else {
+                            Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                        }
+                    })
+                }
+                Layer3Id::Arp => {
+                    Arp::parse(&value.payload)
                         .map_err(|e| {
                             let err: Self::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))

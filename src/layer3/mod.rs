@@ -10,7 +10,7 @@ use std;
 /// Available layer 3 representations
 ///
 pub enum Layer3<'a> {
-    //Arp(apr::Arp),
+    Arp(arp::Arp),
     IPv4(ipv4::IPv4<'a>),
     IPv6(ipv6::IPv6<'a>),
     //Lldp(lldp::Lldp)
