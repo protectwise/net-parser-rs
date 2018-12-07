@@ -14,7 +14,7 @@ net-parser-rs="~0.1"
     #![feature(try_from)]
     extern crate net_parser_rs;
 
-    use net_parser_rs::NetworkParser;
+    use net_parser_rs::CaptureParser;
     use std::*;
 
     //Parse a file with global header and packet records
@@ -28,7 +28,7 @@ net-parser-rs="~0.1"
     let packet = CaptureParser::parse_record(packet_bytes).expect("Could not parse");
 
     //Convert a packet into flow information
-    use net_parser_rs::convert::*;
+    use net_parser_rs::flow::*;
 
-    let flow = Flow::try_from(packet).expect("Could not convert packet");
+    let flow = packet.extract_flow().expect("Could not extract flow");
 ```
