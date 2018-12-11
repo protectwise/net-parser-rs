@@ -75,7 +75,7 @@ pub trait FlowExtraction {
                 if rem.is_empty() {
                     Layer2FlowInfo::try_from(l2)
                 } else {
-                    Err(Error::from_kind(ErrorKind::IncompleteParse(rem.len())))
+                    Err(Error::from_kind(ErrorKind::L2IncompleteParse(rem.len())))
                 }
             })?;
 

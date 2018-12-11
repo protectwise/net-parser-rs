@@ -151,7 +151,7 @@ impl<'a> TryFrom<IPv6<'a>> for Layer3FlowInfo {
                     if rem.is_empty() {
                         Layer4FlowInfo::try_from(l4)
                     } else {
-                        Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                        Err(errors::Error::from_kind(errors::ErrorKind::L3IncompleteParse(rem.len())))
                     }
                 })
             }
@@ -165,7 +165,7 @@ impl<'a> TryFrom<IPv6<'a>> for Layer3FlowInfo {
                     if rem.is_empty() {
                         Layer4FlowInfo::try_from(l4)
                     } else {
-                        Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                        Err(errors::Error::from_kind(errors::ErrorKind::L3IncompleteParse(rem.len())))
                     }
                 })
             }
