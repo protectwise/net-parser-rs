@@ -33,6 +33,15 @@ pub mod errors {
             IncompleteParse(amt: usize) {
                 display("Incomplete parse of payload, {} bytes remain", amt)
             }
+            L2IncompleteParse(amt: usize) {
+                display("Incomplete parse of layer2, {} bytes remain", amt)
+            }
+            L3IncompleteParse(amt: usize) {
+                display("Incomplete parse of layer3, {} bytes remain", amt)
+            }
+            L4IncompleteParse(amt: usize) {
+                display("Incomplete parse of layer4, {} bytes remain", amt)
+            }
             EthernetType(value: layer2::ethernet::EthernetTypeId) {
                 display("Invalid ethernet type {:?}", value)
             }

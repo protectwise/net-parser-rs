@@ -29,7 +29,7 @@ use std::{
 };
 
 const ETHERNET_PAYLOAD: u16 = 1500u16;
-const VLAN_LENGTH: usize = 4;
+const VLAN_LENGTH: usize = 2;
 
 ///
 /// List of valid ethernet types that aren't payload or vlan. https://en.wikipedia.org/wiki/EtherType
@@ -76,12 +76,14 @@ impl EthernetTypeId {
 
 pub struct VlanTag {
     vlan_type: VlanTypeId,
-    value: [u8; 4]
+    prio: u8,
+    dei: u8,
+    id: u16
 }
 
 impl VlanTag {
     pub fn vlan(&self) -> u16 {
-        unsafe { std::mem::transmute::<[u8; 2], u16>(array_ref!(self.value, 2, 2).clone()) }
+        self.id
     }
 }
 
@@ -129,22 +131,27 @@ impl<'a> Ethernet<'a> {
         self.payload
     }
 
-    fn parse_with_existing_vlan_tag<'b>(
+    fn parse_not_vlan_tag<'b>(
         input: &'b [u8],
         dst_mac: MacAddress,
         src_mac: MacAddress,
-        vlan_type: VlanTypeId,
+        ether_type: EthernetTypeId,
         agg: std::vec::Vec<VlanTag>
     ) -> nom::IResult<&'b [u8], Ethernet<'b>> {
-        take!(input, VLAN_LENGTH).and_then(|r| {
-            let (rem, vlan) = r;
-            let mut agg_mut = agg;
-            agg_mut.push(VlanTag {
-                vlan_type: vlan_type,
-                value: array_ref!(vlan, 0, VLAN_LENGTH).clone()
-            });
-            Ethernet::parse_vlan_tag(rem, dst_mac, src_mac, agg_mut)
-        })
+        do_parse!(input,
+
+            payload: rest >>
+
+            (
+                Ethernet {
+                    dst_mac: dst_mac,
+                    src_mac: src_mac,
+                    ether_type: ether_type,
+                    vlans: agg,
+                    payload: payload.into()
+                }
+            )
+        )
     }
 
     fn parse_vlan_tag<'b>(
@@ -153,37 +160,42 @@ impl<'a> Ethernet<'a> {
         src_mac: MacAddress,
         agg: std::vec::Vec<VlanTag>
     ) -> nom::IResult<&'b [u8], Ethernet<'b>> {
-        let vlan_res = do_parse!(input,
+        let (input, vlan) = do_parse!(input,
 
             vlan: map_opt!(be_u16, EthernetTypeId::new) >>
 
             (vlan)
-        );
+        )?;
 
-        vlan_res.and_then(|r| {
-            let (rem, vlan) = r;
-            match vlan {
-                EthernetTypeId::Vlan(vlan_type_id) => {
-                    Ethernet::parse_with_existing_vlan_tag(rem, dst_mac, src_mac, vlan_type_id, agg)
-                }
-                not_vlan => {
-                    do_parse!(rem,
+        if let EthernetTypeId::Vlan(vlan_type_id) = vlan {
+            let (input, (prio, dei, id)) = do_parse!(input,
 
-                        payload: rest >>
+                total: be_u16 >>
 
-                        (
-                            Ethernet {
-                                dst_mac: dst_mac,
-                                src_mac: src_mac,
-                                ether_type: not_vlan,
-                                vlans: agg,
-                                payload: payload.into()
-                            }
-                        )
-                    )
-                }
-            }
-        })
+                ( (
+                    (total & 0x7000) as u8,
+                    (total & 0x8000) as u8,
+                    total & 0x0FFF
+                ) )
+            )?;
+
+            let tag = VlanTag {
+                vlan_type: vlan_type_id,
+                prio: prio,
+                dei: dei,
+                id: id
+            };
+
+            debug!("Encountered vlan {:012b}", tag.vlan());
+
+            let mut agg = agg;
+            agg.push(tag);
+
+            Ethernet::parse_vlan_tag(input, dst_mac, src_mac, agg)
+        } else {
+            debug!("Encountered non vlan {:?}", vlan);
+            Ethernet::parse_not_vlan_tag(input, dst_mac, src_mac, vlan, agg)
+        }
     }
 
     pub fn new(
@@ -231,6 +243,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                 Layer3Id::IPv4 => {
                     IPv4::parse(&value.payload)
                         .map_err(|e| {
+                            error!("Error parsing ipv4 {:?}", e);
                             let err: Self::Error = e.into();
                             err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                         }).and_then(|r| {
@@ -238,7 +251,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                         if rem.is_empty() {
                             Layer3FlowInfo::try_from(l3)
                         } else {
-                            Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                            Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
                         }
                     })
                 }
@@ -252,7 +265,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                         if rem.is_empty() {
                             Layer3FlowInfo::try_from(l3)
                         } else {
-                            Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                            Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
                         }
                     })
                 }
@@ -266,7 +279,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                         if rem.is_empty() {
                             Layer3FlowInfo::try_from(l3)
                         } else {
-                            Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                            Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
                         }
                     })
                 }

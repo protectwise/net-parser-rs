@@ -35,12 +35,14 @@ impl GlobalHeader {
         do_parse!(input,
 
             endianness: map!(u32!(NATIVE_ENDIAN), |e| {
-                let res = match e {
-                    MAGIC_NUMBER => NATIVE_ENDIAN,
-                    _ if NATIVE_ENDIAN == Endianness::Little => Endianness::Big,
-                    _ => Endianness::Little
+                let res = if e == MAGIC_NUMBER {
+                    NATIVE_ENDIAN
+                } else if NATIVE_ENDIAN == Endianness::Little {
+                    Endianness::Big
+                } else {
+                    Endianness::Little
                 };
-                debug!("Read {:02x} compared to magic number {:02x}, setting endianness to {:?}", e, MAGIC_NUMBER, res);
+                debug!("Using endianness {:?} read {:02x} compared to magic number {:02x}, setting endianness to {:?}", NATIVE_ENDIAN, e, MAGIC_NUMBER, res);
                 res
             }) >>
             version_major: u16!(endianness) >>

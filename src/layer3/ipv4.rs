@@ -51,6 +51,10 @@ named!(
     map!(take!(ADDRESS_LENGTH), to_ip_address)
 );
 
+fn is_zero(v: u8) -> bool {
+    v == 0u8
+}
+
 impl<'a> IPv4<'a> {
     pub fn dst_ip(&self) -> &std::net::IpAddr {
         &self.dst_ip
@@ -63,19 +67,33 @@ impl<'a> IPv4<'a> {
     }
     pub fn payload(&self) -> &'a [u8] { &self.payload }
 
-    fn parse_ipv4<'b>(input: &'b [u8], version_and_length: u8) -> IResult<&'b [u8], IPv4<'b>> {
-        let header_length = (version_and_length  & 0x0F) * 4;
+    fn parse_ipv4<'b>(input: &'b [u8], input_length: usize, version_and_length: u8) -> IResult<&'b [u8], IPv4<'b>> {
+        let header_words = version_and_length  & 0x0F;
+        let header_length = header_words * 4;
+        let additional_length = if header_words > 5 {
+            (header_words - 5) * 4
+        } else {
+            0
+        };
 
-        trace!("Header Length={}", header_length);
+        trace!("Input Length={}   Header Length={}   Additional Length={}", input_length, header_length, additional_length);
 
-        do_parse!(input,
-
+        let (rem, (tos, length)) = do_parse!(input,
             tos: be_u8 >>
             length: map!(be_u16, |s| {
                 let l = s - (header_length as u16);
                 trace!("Payload Length={}", l);
                 l
             }) >>
+
+            ( (tos, length) )
+        )?;
+
+        let expected_length = header_length as usize + additional_length as usize + length as usize;
+        trace!("Input had length {}B, expected {}B", input_length, expected_length);
+
+        do_parse!(rem,
+
             id: be_u16 >>
             flags: be_u16 >>
             ttl: be_u8 >>
@@ -84,7 +102,14 @@ impl<'a> IPv4<'a> {
             src_ip: ipv4_address >>
             dst_ip: ipv4_address >>
             payload: take!(length) >>
-
+            _options: cond!(
+                additional_length > 0,
+                take!(additional_length)
+            ) >>
+            _padding: cond!(
+                input_length > expected_length,
+                take!(input_length - expected_length)
+            ) >>
             (
                 IPv4 {
                     dst_ip: dst_ip,
@@ -117,13 +142,13 @@ impl<'a> IPv4<'a> {
     }
 
     pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], IPv4<'b>> {
-        trace!("Available={}", input.len());
+        let input_len = input.len();
 
         be_u8(input).and_then(|r| {
             let (rem, version_and_length) = r;
             let version = version_and_length >> 4;
             if version == 4 {
-                IPv4::parse_ipv4(rem, version_and_length)
+                IPv4::parse_ipv4(rem, input_len, version_and_length)
             } else {
                 Err(NomError::convert(NomError::Error(error_position!(input, NomErrorKind::CondReduce::<u32>))))
             }
@@ -147,7 +172,7 @@ impl<'a> TryFrom<IPv4<'a>> for Layer3FlowInfo {
                     if rem.is_empty() {
                         Layer4FlowInfo::try_from(l4)
                     } else {
-                        Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                        Err(errors::Error::from_kind(errors::ErrorKind::L3IncompleteParse(rem.len())))
                     }
                 })
             }
@@ -161,7 +186,7 @@ impl<'a> TryFrom<IPv4<'a>> for Layer3FlowInfo {
                     if rem.is_empty() {
                         Layer4FlowInfo::try_from(l4)
                     } else {
-                        Err(errors::Error::from_kind(errors::ErrorKind::IncompleteParse(rem.len())))
+                        Err(errors::Error::from_kind(errors::ErrorKind::L3IncompleteParse(rem.len())))
                     }
                 })
             }
