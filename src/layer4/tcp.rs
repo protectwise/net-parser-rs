@@ -5,16 +5,17 @@ use crate::{
         ErrorKind
     },
     flow,
-    layer4::Layer4FlowInfo
+    layer4::{
+        Layer4FlowInfo,
+        Layer4Protocol,
+    }
 };
-
 use log::*;
 use nom::{
     *,
     Err as NomError,
     ErrorKind as NomErrorKind
 };
-use std;
 use std::convert::TryFrom;
 
 const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
@@ -101,14 +102,16 @@ impl<'a> Tcp<'a> {
     }
 }
 
-impl<'a> TryFrom<Tcp<'a>> for Layer4FlowInfo {
-    type Error = errors::Error;
+impl<'a> From<Tcp<'a>> for Layer4FlowInfo {
+//    type Error = errors::Error;
 
-    fn try_from(value: Tcp<'a>) -> Result<Self, Self::Error> {
-        Ok(Layer4FlowInfo {
+    fn from(value: Tcp<'a>) -> Self {
+
+        Layer4FlowInfo {
             dst_port: value.dst_port,
-            src_port: value.src_port
-        })
+            src_port: value.src_port,
+            protocol: Layer4Protocol::Tcp,
+        }
     }
 }
 
@@ -116,8 +119,8 @@ impl<'a> TryFrom<Tcp<'a>> for Layer4FlowInfo {
 mod tests {
     extern crate env_logger;
     extern crate hex_slice;
-    use self::hex_slice::AsHex;
 
+    use self::hex_slice::AsHex;
     use super::*;
 
     const RAW_DATA: &'static [u8] = &[
@@ -140,6 +143,8 @@ mod tests {
         0x00u8, 0x00u8, 0x00u8, 0x00u8,
         0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
     ];
+
+
 
     #[test]
     fn convert_length() {
@@ -167,6 +172,7 @@ mod tests {
             0xfcu8, 0xfdu8, 0xfeu8, 0xffu8], "Payload Mismatch: {:x}", l4.payload().as_hex());
     }
 
+
     #[test]
     fn convert_tcp() {
         let _ = env_logger::try_init();
@@ -175,7 +181,7 @@ mod tests {
 
         assert!(rem.is_empty());
 
-        let info = Layer4FlowInfo::try_from(l4).expect("Could not convert to layer 4 info");
+        let info = Layer4FlowInfo::from(l4);
 
         assert_eq!(info.src_port, 50871);
         assert_eq!(info.dst_port, 80);

@@ -1,5 +1,6 @@
 #![allow(unused)]
 #![feature(test, try_from)]
+#![feature(nll)]
 #![recursion_limit="128"]
 ///! net-parser-rs
 ///!
@@ -8,11 +9,27 @@
 ///!
 #[macro_use] extern crate error_chain;
 
-pub mod errors {
-    use std;
-    use crate::layer2;
-    use crate::layer3;
+use crate::{
+    errors::{
+        Error,
+        ErrorKind
+    },
+    flow::FlowInfo
+};
+use log::*;
+use nom::*;
 
+pub mod common;
+
+pub mod flow;
+pub mod global_header;
+pub mod layer2;
+pub mod layer3;
+pub mod layer4;
+pub mod record;
+pub mod stream;
+
+pub mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
     error_chain! {
         foreign_links {
@@ -42,16 +59,16 @@ pub mod errors {
             L4IncompleteParse(amt: usize) {
                 display("Incomplete parse of layer4, {} bytes remain", amt)
             }
-            EthernetType(value: layer2::ethernet::EthernetTypeId) {
+            EthernetType(value: crate::layer2::ethernet::EthernetTypeId) {
                 display("Invalid ethernet type {:?}", value)
             }
             IPv4Length(value: u8) {
                 display("Invalid IPv4 length {}", value)
             }
-            IPv4Type(value: layer3::InternetProtocolId) {
+            IPv4Type(value: crate::layer3::InternetProtocolId) {
                 display("Invalid ipv4 type {:?}", value)
             }
-            IPv6Type(value: layer3::InternetProtocolId) {
+            IPv6Type(value: crate::layer3::InternetProtocolId) {
                 display("Invalid ipv6 type {:?}", value)
             }
             FlowConversion(why: String) {
@@ -83,23 +100,236 @@ pub mod errors {
     }
 }
 
-pub mod common;
-pub mod flow;
-pub mod global_header;
-pub mod layer2;
-pub mod layer3;
-pub mod layer4;
-pub mod record;
-pub mod stream;
 
-use crate::{
-    errors::{
-        Error,
-        ErrorKind
+pub trait Protocol: std::fmt::Display {}
+
+
+///
+/// Main interface to access protocol and flow information of a packet.
+/// 
+/// # Example
+/// 
+/// ```no_run
+/// use net_parser_rs::layer2::{ethernet::Ethernet, Layer2FlowInfo, Layer2Protocol};
+/// use net_parser_rs::layer3::Layer3Protocol;
+/// use net_parser_rs::layer4::Layer4Protocol;
+/// use net_parser_rs::flow::FlowInfo;
+///
+/// let valid_packet_bytes = [0xde, 0xad, 0xbe, 0xef];
+/// 
+/// let (_, layer2) = Ethernet::parse(&valid_packet_bytes).expect("Could not parse as ethernet.");
+///
+/// // Flow information for Layer2
+/// let l2_flow = Layer2FlowInfo::from(layer2);
+/// 
+/// println!("{:?}", l2_flow.src_mac);
+///
+/// assert!(l2_flow.next_layer().is_success());
+/// assert_eq!(l2_flow.next_layer().protocol(), &Layer3Protocol::IPv4);
+///
+/// // Layer3 trace
+/// let l3_flow = l2_flow.next_layer().flow().expect("layer3 flow missing.");
+///
+/// println!("{:?}", l3_flow.src_ip);
+/// 
+/// assert!(l3_flow.next_layer().is_success());
+/// assert_eq!(l3_flow.next_layer().protocol(), &Layer4Protocol::Tcp);
+///
+/// // Layer4 trace
+/// let l4_flow = l3_flow.next_layer().flow().expect("layer3 flow missing.");
+/// 
+/// println!("{:?}", l4_flow.dst_port);
+/// 
+/// assert_eq!(l4_flow.protocol(), &Layer4Protocol::Tcp);
+/// ```
+///
+#[derive(Debug)]
+pub enum LayerExtraction<P: Protocol, F: FlowInfo> {
+    Unknown(P),
+    Failure(P, errors::Error),
+    Success(P, F),
+    None,
+}
+
+impl<P: Protocol, F: FlowInfo> LayerExtraction<P, F> {
+    ///
+    /// Combines the result of a layer extraction and its expected protocol as a LayerExtraction. This function will
+    /// generally only be used by `net-parser-rs` during the creation of an entire `FlowExtraction`.
+    /// 
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use net_parser_rs::{layer2, flow::FlowInfo, LayerExtraction};
+    /// 
+    /// let payload = [0xde, 0xad, 0xbe, 0xef];
+    /// 
+    /// let (_, parsed_data) = layer2::ethernet::Ethernet::parse(&payload).unwrap();
+    /// let layer2_flow = layer2::Layer2FlowInfo::from(parsed_data);
+    /// let layer2_proto = layer2::Layer2Protocol::Ethernet;
+    /// 
+    /// let extraction = LayerExtraction::map_extraction(layer2_proto, Ok(layer2_flow));
+    /// assert_eq!(extraction.protocol(), &layer2::Layer2Protocol::Ethernet);
+    /// ```
+    /// 
+    ///
+    pub fn map_extraction(protocol: P, extraction: Result<F, Error>) -> LayerExtraction<P, F> {
+        match extraction {
+            Ok(flow) => LayerExtraction::Success(protocol, flow),
+            Err(error) => LayerExtraction::Failure(protocol, error),
+        }
     }
-};
-use log::*;
-use nom::*;
+
+    ///
+    /// Unwraps the FlowInfo from a LayerExtraction.
+    /// 
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use net_parser_rs::{layer2, flow::FlowInfo};
+    /// 
+    /// let payload = [0xde, 0xad, 0xbe, 0xef];
+    /// 
+    /// let (_, parsed_data) = layer2::ethernet::Ethernet::parse(&payload).unwrap();
+    /// let layer2_flow = layer2::Layer2FlowInfo::from(parsed_data);
+    /// 
+    /// let layer3_extraction = layer2_flow.next_layer();
+    /// let layer3_flow = layer3_extraction.flow();
+    /// ```
+    /// 
+    /// # Panics
+    ///
+    /// Panics if the LayerExtraction is not `LayerExtraction::Success`.
+    ///
+    pub fn unwrap_flow(self) -> F {
+        match self {
+            LayerExtraction::Success(_, flow) => flow,
+            _ => panic!("Unable to unwrap LayerExtraction"),
+        }
+    }
+
+    ///
+    /// Returns a reference to the contained flow.
+    /// 
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use net_parser_rs::{layer2, flow::FlowInfo};
+    /// 
+    /// let payload = [0xde, 0xad, 0xbe, 0xef];
+    /// 
+    /// let (_, parsed_data) = layer2::ethernet::Ethernet::parse(&payload).unwrap();
+    /// let layer2_flow = layer2::Layer2FlowInfo::from(parsed_data);
+    /// 
+    /// let layer3_extraction = layer2_flow.next_layer();
+    /// if let Some(flow) = layer3_extraction.flow() {
+    ///     let layer4_flow = flow.next_layer();
+    /// }
+    /// ```
+    ///
+    pub fn flow(&self) -> Option<&F> {
+        match self {
+            LayerExtraction::Success(_, flow) => Some(flow),
+            _ => None,
+        }
+    }
+
+    ///
+    /// Returns `true` if the LayerExtraction is `Success`.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use net_parser_rs::{layer2, flow::FlowInfo};
+    /// 
+    /// let good_payload = [0xde, 0xad, 0xbe, 0xef];
+    /// 
+    /// let (_, parsed_data) = layer2::ethernet::Ethernet::parse(&good_payload).unwrap();
+    /// let layer2_flow = layer2::Layer2FlowInfo::from(parsed_data);
+    /// 
+    /// let layer3_extraction = layer2_flow.next_layer(); 
+    /// assert!(layer3_extraction.is_success());
+    /// ```
+    /// 
+    pub fn is_success(&self) -> bool {
+        match &self {
+            LayerExtraction::Success(_, _) => true,
+            _ => false,
+        }
+    }
+
+    ///
+    /// Returns `true` if the LayerExtraction is `LayerExtraction::Failure`.
+    ///
+    /// ```no_run
+    /// use net_parser_rs::{layer2, flow::FlowInfo};
+    /// 
+    /// let bad_payload = [0xde, 0xad, 0xbe, 0xef];
+    /// 
+    /// let (_, parsed_data) = layer2::ethernet::Ethernet::parse(&bad_payload).unwrap();
+    /// let layer2_flow = layer2::Layer2FlowInfo::from(parsed_data);
+    /// 
+    /// let layer3_extraction = layer2_flow.next_layer(); 
+    /// assert!(layer3_extraction.is_failure());
+    /// ```
+    /// 
+    pub fn is_failure(&self) -> bool {
+        match &self {
+            LayerExtraction::Failure(_, _) => true,
+            _ => false,
+        }
+    }
+
+    ///
+    /// Returns `true` if the LayerExtraction is `LayerExtraction::Unknown`.
+    ///
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use net_parser_rs::{layer2, flow::FlowInfo};
+    /// 
+    /// let unknown_payload = [0xde, 0xad, 0xbe, 0xef];
+    /// 
+    /// let (_, parsed_data) = layer2::ethernet::Ethernet::parse(&unknown_payload).unwrap();
+    /// let layer2_flow = layer2::Layer2FlowInfo::from(parsed_data);
+    /// 
+    /// let layer3_extraction = layer2_flow.next_layer(); 
+    /// assert!(layer3_extraction.is_failure());
+    /// ```
+    /// 
+    pub fn is_unknown(&self) -> bool {
+        match &self {
+            LayerExtraction::Unknown(_) => true,
+            _ => false,
+        }
+    }
+
+    ///
+    /// Returns a reference to the attempted protocol.
+    ///
+    /// # Example
+    /// 
+    /// ```no_run
+    /// use net_parser_rs::{layer2, flow::FlowInfo, layer3};
+    /// 
+    /// let good_payload = [0xde, 0xad, 0xbe, 0xef];
+    /// 
+    /// let (_, parsed_data) = layer2::ethernet::Ethernet::parse(&good_payload).unwrap();
+    /// let layer2_flow = layer2::Layer2FlowInfo::from(parsed_data);
+    /// 
+    /// let layer3_extraction = layer2_flow.next_layer(); 
+    /// assert_eq!(layer3_extraction.protocol(), &layer3::Layer3Protocol::IPv4);
+    /// ```
+    /// 
+    pub fn protocol(&self) -> &P {
+        match self {
+            LayerExtraction::Unknown(p) => p,
+            LayerExtraction::Failure(p, _) => p,
+            LayerExtraction::Success(p, _) => p,
+            LayerExtraction::None => unimplemented!(),
+        }
+    }
+}
+
 
 ///
 /// Primary utility for parsing packet captures, either from file, bytes, or interfaces.
@@ -193,17 +423,20 @@ impl CaptureParser {
 
 #[cfg(test)]
 mod tests {
+    #![feature(nll)]
+    
     extern crate test;
 
     use crate::{
         CaptureParser,
         flow::FlowExtraction,
-        record::PcapRecord
+        LayerExtraction,
+        record::PcapRecord,
     };
     use nom::Endianness;
+    use self::test::Bencher;
     use std::io::prelude::*;
     use std::path::PathBuf;
-    use self::test::Bencher;
 
     const RAW_DATA: &'static [u8] = &[
         0x4du8, 0x3c, 0x2b, 0x1au8, //magic number
@@ -219,6 +452,42 @@ mod tests {
         0x00u8, 0x00u8, 0x00u8, 0x56u8, //actual length, 86: 14 (ethernet) + 20 (ipv4 header) + 20 (tcp header) + 32 (tcp payload)
         0x00u8, 0x00u8, 0x04u8, 0xD0u8, //original length, 1232
         //ethernet
+        0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
+        0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
+        0x08u8, 0x00u8, //ipv4
+        //ipv4
+        0x45u8, //version and header length
+        0x00u8, //tos
+        0x00u8, 0x48u8, //length, 20 bytes for header, 52 bytes for ethernet
+        0x00u8, 0x00u8, //id
+        0x00u8, 0x00u8, //flags
+        0x64u8, //ttl
+        0x06u8, //protocol, tcp
+        0x00u8, 0x00u8, //checksum
+        0x01u8, 0x02u8, 0x03u8, 0x04u8, //src ip 1.2.3.4
+        0x0Au8, 0x0Bu8, 0x0Cu8, 0x0Du8, //dst ip 10.11.12.13
+        //tcp
+        0xC6u8, 0xB7u8, //src port, 50871
+        0x00u8, 0x50u8, //dst port, 80
+        0x00u8, 0x00u8, 0x00u8, 0x01u8, //sequence number, 1
+        0x00u8, 0x00u8, 0x00u8, 0x02u8, //acknowledgement number, 2
+        0x50u8, 0x00u8, //header and flags, 0
+        0x00u8, 0x00u8, //window
+        0x00u8, 0x00u8, //check
+        0x00u8, 0x00u8, //urgent
+        //no options
+        //payload
+        0x01u8, 0x02u8, 0x03u8, 0x04u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
+    ];
+
+    const RAW_ETHERNET: &'static [u8] = &[//ethernet
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
         0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
         0x08u8, 0x00u8, //ipv4
@@ -355,5 +624,35 @@ mod tests {
 
             assert_eq!(converted_records.len(), 129643);
         });
+    }
+
+    #[test]
+    fn full_trace() {
+        use crate::layer2::{ethernet::Ethernet, Layer2FlowInfo, Layer2Protocol};
+        use crate::layer3::Layer3Protocol;
+        use crate::layer4::Layer4Protocol;
+        use crate::flow::FlowInfo;
+
+        let _ = env_logger::try_init();
+
+        let (rem, l2) = Ethernet::parse(RAW_ETHERNET).expect("Could not parse");
+
+        assert!(rem.is_empty(), "rem not empty: {:?}", rem);
+
+        // Check the layer2 trace.
+        let l2_info = Layer2FlowInfo::from(l2);
+
+        assert!(l2_info.next_layer().is_success());
+        assert_eq!(*l2_info.next_layer().protocol(), Layer3Protocol::IPv4);
+
+        // Check the layer3 trace.
+        let l3_flow = l2_info.next_layer().flow().expect("layer3 flow missing.");
+
+        assert!(l3_flow.next_layer().is_success());
+        assert_eq!(*l3_flow.next_layer().protocol(), Layer4Protocol::Tcp);
+
+        // Check the layer4 trace.
+        let l4_flow = l3_flow.next_layer().flow().expect("layer3 flow missing.");
+        assert_eq!(*l4_flow.protocol(), Layer4Protocol::Tcp);
     }
 }
