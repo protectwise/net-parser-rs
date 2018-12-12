@@ -17,23 +17,29 @@ pub struct GlobalHeader {
     zone: i32,
     sig_figs: i32,
     snap_length: u32,
-    network: u32
+    network: u32,
 }
 
 impl GlobalHeader {
-    pub fn endianness(&self) -> Endianness { self.endianness }
+    pub fn endianness(&self) -> Endianness {
+        self.endianness
+    }
 
-    pub fn version_major(&self) -> u16 { self.version_major }
+    pub fn version_major(&self) -> u16 {
+        self.version_major
+    }
 
-    pub fn version_minor(&self) -> u16 { self.version_minor }
+    pub fn version_minor(&self) -> u16 {
+        self.version_minor
+    }
 
     pub fn snap_length(&self) -> u32 {
         self.snap_length
     }
 
     pub fn parse<'a>(input: &'a [u8]) -> IResult<&'a [u8], GlobalHeader> {
-        do_parse!(input,
-
+        do_parse!(
+            input,
             endianness: map!(u32!(NATIVE_ENDIAN), |e| {
                 let res = if e == MAGIC_NUMBER {
                     NATIVE_ENDIAN
@@ -44,16 +50,13 @@ impl GlobalHeader {
                 };
                 debug!("Using endianness {:?} read {:02x} compared to magic number {:02x}, setting endianness to {:?}", NATIVE_ENDIAN, e, MAGIC_NUMBER, res);
                 res
-            }) >>
-            version_major: u16!(endianness) >>
-            version_minor: u16!(endianness) >>
-            zone: i32!(endianness) >>
-            sig_figs: i32!(endianness) >>
-            snap_length: u32!(endianness) >>
-            network: u32!(endianness) >>
-
-            (
-                GlobalHeader {
+            }) >> version_major: u16!(endianness)
+                >> version_minor: u16!(endianness)
+                >> zone: i32!(endianness)
+                >> sig_figs: i32!(endianness)
+                >> snap_length: u32!(endianness)
+                >> network: u32!(endianness)
+                >> (GlobalHeader {
                     endianness: endianness,
                     version_major: version_major,
                     version_minor: version_minor,
@@ -61,9 +64,8 @@ impl GlobalHeader {
                     sig_figs: sig_figs,
                     snap_length: snap_length,
                     network: network
-                }
-            )
-    )
+                })
+        )
     }
 }
 
@@ -131,7 +133,7 @@ mod tests {
 
         let expected_endianness = match NATIVE_ENDIAN {
             Endianness::Little => Endianness::Big,
-            Endianness::Big => Endianness::Little
+            Endianness::Big => Endianness::Little,
         };
 
         assert!(rem.is_empty());

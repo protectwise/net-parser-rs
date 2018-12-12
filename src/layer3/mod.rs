@@ -22,7 +22,7 @@ pub enum Layer3<'a> {
 pub struct Layer3FlowInfo {
     pub dst_ip: std::net::IpAddr,
     pub src_ip: std::net::IpAddr,
-    pub layer4: crate::layer4::Layer4FlowInfo
+    pub layer4: crate::layer4::Layer4FlowInfo,
 }
 
 ///
@@ -39,7 +39,7 @@ pub enum InternetProtocolId {
     IPv6NoNext,
     IPv6Options,
     Tcp,
-    Udp
+    Udp,
 }
 
 impl InternetProtocolId {
@@ -71,7 +71,7 @@ impl InternetProtocolId {
             InternetProtocolId::IPv6Route => true,
             InternetProtocolId::IPv6Fragment => true,
             InternetProtocolId::IPv6Options => true,
-            _ => false
+            _ => false,
         }
     }
 }

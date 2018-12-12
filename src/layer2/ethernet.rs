@@ -1,32 +1,15 @@
 use crate::{
-    common::{
-        MAC_LENGTH,
-        MacAddress,
-        Vlan
-    },
-    errors::{
-        self,
-        Error,
-        ErrorKind
-    },
+    common::{MacAddress, Vlan, MAC_LENGTH},
+    errors::{self, Error, ErrorKind},
     layer2::Layer2FlowInfo,
-    layer3::{
-        Layer3,
-        Layer3FlowInfo,
-        ipv4::*,
-        ipv6::*,
-        arp::*
-    }
+    layer3::{arp::*, ipv4::*, ipv6::*, Layer3, Layer3FlowInfo},
 };
 
 use arrayref::array_ref;
 use log::*;
 use nom::*;
 
-use std::{
-    self,
-    convert::TryFrom
-};
+use std::{self, convert::TryFrom};
 
 const ETHERNET_PAYLOAD: u16 = 1500u16;
 const VLAN_LENGTH: usize = 2;
@@ -39,7 +22,7 @@ pub enum Layer3Id {
     Lldp,
     IPv4,
     IPv6,
-    Arp
+    Arp,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,7 +35,7 @@ pub enum VlanTypeId {
 pub enum EthernetTypeId {
     PayloadLength(u16),
     Vlan(VlanTypeId),
-    L3(Layer3Id)
+    L3(Layer3Id),
 }
 
 impl EthernetTypeId {
@@ -78,7 +61,7 @@ pub struct VlanTag {
     vlan_type: VlanTypeId,
     prio: u8,
     dei: u8,
-    id: u16
+    id: u16,
 }
 
 impl VlanTag {
@@ -92,7 +75,7 @@ pub struct Ethernet<'a> {
     src_mac: MacAddress,
     ether_type: EthernetTypeId,
     vlans: std::vec::Vec<VlanTag>,
-    payload: &'a [u8]
+    payload: &'a [u8],
 }
 
 fn to_mac_address(i: &[u8]) -> MacAddress {
@@ -136,21 +119,18 @@ impl<'a> Ethernet<'a> {
         dst_mac: MacAddress,
         src_mac: MacAddress,
         ether_type: EthernetTypeId,
-        agg: std::vec::Vec<VlanTag>
+        agg: std::vec::Vec<VlanTag>,
     ) -> nom::IResult<&'b [u8], Ethernet<'b>> {
-        do_parse!(input,
-
-            payload: rest >>
-
-            (
-                Ethernet {
+        do_parse!(
+            input,
+            payload: rest
+                >> (Ethernet {
                     dst_mac: dst_mac,
                     src_mac: src_mac,
                     ether_type: ether_type,
                     vlans: agg,
                     payload: payload.into()
-                }
-            )
+                })
         )
     }
 
@@ -158,32 +138,27 @@ impl<'a> Ethernet<'a> {
         input: &'b [u8],
         dst_mac: MacAddress,
         src_mac: MacAddress,
-        agg: std::vec::Vec<VlanTag>
+        agg: std::vec::Vec<VlanTag>,
     ) -> nom::IResult<&'b [u8], Ethernet<'b>> {
-        let (input, vlan) = do_parse!(input,
-
-            vlan: map_opt!(be_u16, EthernetTypeId::new) >>
-
-            (vlan)
-        )?;
+        let (input, vlan) =
+            do_parse!(input, vlan: map_opt!(be_u16, EthernetTypeId::new) >> (vlan))?;
 
         if let EthernetTypeId::Vlan(vlan_type_id) = vlan {
-            let (input, (prio, dei, id)) = do_parse!(input,
-
-                total: be_u16 >>
-
-                ( (
-                    (total & 0x7000) as u8,
-                    (total & 0x8000) as u8,
-                    total & 0x0FFF
-                ) )
+            let (input, (prio, dei, id)) = do_parse!(
+                input,
+                total: be_u16
+                    >> ((
+                        (total & 0x7000) as u8,
+                        (total & 0x8000) as u8,
+                        total & 0x0FFF
+                    ))
             )?;
 
             let tag = VlanTag {
                 vlan_type: vlan_type_id,
                 prio: prio,
                 dei: dei,
-                id: id
+                id: id,
             };
 
             debug!("Encountered vlan {:012b}", tag.vlan());
@@ -203,26 +178,23 @@ impl<'a> Ethernet<'a> {
         src_mac: MacAddress,
         ether_type: EthernetTypeId,
         vlans: std::vec::Vec<VlanTag>,
-        payload: &'a [u8]
+        payload: &'a [u8],
     ) -> Ethernet {
         Ethernet {
             dst_mac,
             src_mac,
             ether_type,
             vlans,
-            payload
+            payload,
         }
     }
 
     pub fn parse<'b>(input: &'b [u8]) -> nom::IResult<&'b [u8], Ethernet> {
         trace!("Available={}", input.len());
 
-        let r = do_parse!(input,
-
-            dst_mac: mac_address >>
-            src_mac: mac_address >>
-
-            ( (dst_mac, src_mac) )
+        let r = do_parse!(
+            input,
+            dst_mac: mac_address >> src_mac: mac_address >> ((dst_mac, src_mac))
         );
 
         r.and_then(|res| {
@@ -237,65 +209,74 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
 
     fn try_from(value: Ethernet) -> Result<Self, Self::Error> {
         let ether_type = value.ether_type;
-        debug!("Creating from layer 3 type {:?} using payload of {}B", ether_type, value.payload.len());
+        debug!(
+            "Creating from layer 3 type {:?} using payload of {}B",
+            ether_type,
+            value.payload.len()
+        );
         let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
             match l3_id {
-                Layer3Id::IPv4 => {
-                    IPv4::parse(&value.payload)
-                        .map_err(|e| {
-                            error!("Error parsing ipv4 {:?}", e);
-                            let err: Self::Error = e.into();
-                            err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
-                        }).and_then(|r| {
+                Layer3Id::IPv4 => IPv4::parse(&value.payload)
+                    .map_err(|e| {
+                        error!("Error parsing ipv4 {:?}", e);
+                        let err: Self::Error = e.into();
+                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                    })
+                    .and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
                             Layer3FlowInfo::try_from(l3)
                         } else {
-                            Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
+                            Err(errors::Error::from_kind(
+                                errors::ErrorKind::L2IncompleteParse(rem.len()),
+                            ))
                         }
+                    }),
+                Layer3Id::IPv6 => IPv6::parse(&value.payload)
+                    .map_err(|e| {
+                        let err: Self::Error = e.into();
+                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                     })
-                }
-                Layer3Id::IPv6 => {
-                    IPv6::parse(&value.payload)
-                        .map_err(|e| {
-                            let err: Self::Error = e.into();
-                            err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
-                        }).and_then(|r| {
+                    .and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
                             Layer3FlowInfo::try_from(l3)
                         } else {
-                            Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
+                            Err(errors::Error::from_kind(
+                                errors::ErrorKind::L2IncompleteParse(rem.len()),
+                            ))
                         }
+                    }),
+                Layer3Id::Arp => Arp::parse(&value.payload)
+                    .map_err(|e| {
+                        let err: Self::Error = e.into();
+                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
                     })
-                }
-                Layer3Id::Arp => {
-                    Arp::parse(&value.payload)
-                        .map_err(|e| {
-                            let err: Self::Error = e.into();
-                            err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
-                        }).and_then(|r| {
+                    .and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
                             Layer3FlowInfo::try_from(l3)
                         } else {
-                            Err(errors::Error::from_kind(errors::ErrorKind::L2IncompleteParse(rem.len())))
+                            Err(errors::Error::from_kind(
+                                errors::ErrorKind::L2IncompleteParse(rem.len()),
+                            ))
                         }
-                    })
-                }
-                _ => {
-                    Err(errors::Error::from_kind(errors::ErrorKind::EthernetType(ether_type)))
-                }
+                    }),
+                _ => Err(errors::Error::from_kind(errors::ErrorKind::EthernetType(
+                    ether_type,
+                ))),
             }
         } else {
-            Err(errors::Error::from_kind(errors::ErrorKind::EthernetType(ether_type)))
+            Err(errors::Error::from_kind(errors::ErrorKind::EthernetType(
+                ether_type,
+            )))
         }?;
 
         Ok(Layer2FlowInfo {
             src_mac: value.src_mac,
             dst_mac: value.dst_mac,
             vlan: Ethernet::vlans_to_vlan(&value.vlans),
-            layer3: l3
+            layer3: l3,
         })
     }
 }
@@ -313,7 +294,7 @@ mod tests {
         0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
         0x00u8, 0x04u8, //payload ethernet
         //payload
-        0x01u8, 0x02u8, 0x03u8, 0x04u8
+        0x01u8, 0x02u8, 0x03u8, 0x04u8,
     ];
 
     const TCP_RAW_DATA: &'static [u8] = &[
@@ -342,14 +323,10 @@ mod tests {
         0x00u8, 0x00u8, //urgent
         //no options
         //payload
-        0x01u8, 0x02u8, 0x03u8, 0x04u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
+        0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0xfcu8, 0xfdu8, 0xfeu8,
+        0xffu8, //payload, 8 words
     ];
 
     #[test]
@@ -359,8 +336,14 @@ mod tests {
         let (rem, l2) = Ethernet::parse(PAYLOAD_RAW_DATA).expect("Could not parse");
 
         assert!(rem.is_empty());
-        assert_eq!(l2.dst_mac().0, [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]);
-        assert_eq!(l2.src_mac().0, [0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8]);
+        assert_eq!(
+            l2.dst_mac().0,
+            [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]
+        );
+        assert_eq!(
+            l2.src_mac().0,
+            [0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8]
+        );
         assert!(l2.vlans().is_empty());
 
         let proto_correct = if let EthernetTypeId::PayloadLength(_) = l2.ether_type() {
@@ -379,8 +362,14 @@ mod tests {
         let (rem, l2) = Ethernet::parse(TCP_RAW_DATA).expect("Could not parse");
 
         assert!(rem.is_empty());
-        assert_eq!(l2.dst_mac().0, [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]);
-        assert_eq!(l2.src_mac().0, [0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8]);
+        assert_eq!(
+            l2.dst_mac().0,
+            [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]
+        );
+        assert_eq!(
+            l2.src_mac().0,
+            [0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8]
+        );
         assert!(l2.vlans().is_empty());
 
         let proto_correct = if let EthernetTypeId::L3(Layer3Id::IPv4) = l2.ether_type() {

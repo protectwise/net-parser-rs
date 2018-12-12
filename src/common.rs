@@ -11,13 +11,10 @@ pub type Port = u16;
 
 impl std::fmt::Display for MacAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-               self.0[0],
-               self.0[1],
-               self.0[2],
-               self.0[3],
-               self.0[4],
-               self.0[5],
+        write!(
+            f,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5],
         )
     }
 }

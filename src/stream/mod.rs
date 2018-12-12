@@ -1,6 +1,3 @@
 mod flow;
 
-pub use self::flow::{
-    FlowStream,
-    WithExtraction
-};
+pub use self::flow::{FlowStream, WithExtraction};

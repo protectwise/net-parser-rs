@@ -1,17 +1,18 @@
 #![allow(unused)]
 #![feature(test, try_from)]
-#![recursion_limit="128"]
+#![recursion_limit = "128"]
 ///! net-parser-rs
 ///!
 ///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
 ///! associated records.
 ///!
-#[macro_use] extern crate error_chain;
+#[macro_use]
+extern crate error_chain;
 
 pub mod errors {
-    use std;
     use crate::layer2;
     use crate::layer3;
+    use std;
 
     // Create the Error, ErrorKind, ResultExt, and Result types
     error_chain! {
@@ -63,7 +64,11 @@ pub mod errors {
         }
     }
 
-    impl<I, E> From<nom::Err<I, E>> for Error where I: std::fmt::Debug, E: std::fmt::Debug {
+    impl<I, E> From<nom::Err<I, E>> for Error
+    where
+        I: std::fmt::Debug,
+        E: std::fmt::Debug,
+    {
         fn from(err: nom::Err<I, E>) -> Error {
             match err {
                 nom::Err::Incomplete(nom::Needed::Unknown) => {
@@ -72,12 +77,8 @@ pub mod errors {
                 nom::Err::Incomplete(nom::Needed::Size(sz)) => {
                     Error::from_kind(ErrorKind::NomIncomplete(format!("{}", sz)))
                 }
-                nom::Err::Error(c) => {
-                    Error::from_kind(ErrorKind::NomError(format!("{:?}", c)))
-                }
-                nom::Err::Failure(c) => {
-                    Error::from_kind(ErrorKind::NomError(format!("{:?}", c)))
-                }
+                nom::Err::Error(c) => Error::from_kind(ErrorKind::NomError(format!("{:?}", c))),
+                nom::Err::Failure(c) => Error::from_kind(ErrorKind::NomError(format!("{:?}", c))),
             }
         }
     }
@@ -92,12 +93,7 @@ pub mod layer4;
 pub mod record;
 pub mod stream;
 
-use crate::{
-    errors::{
-        Error,
-        ErrorKind
-    }
-};
+use crate::errors::{Error, ErrorKind};
 use log::*;
 use nom::*;
 
@@ -132,13 +128,26 @@ impl CaptureParser {
     ///
     /// Parse a slice of bytes that start with libpcap file format header (https://wiki.wireshark.org/Development/LibpcapFileFormat)
     ///
-    pub fn parse_file<'a>(input: &'a [u8]) -> IResult<&'a [u8], (global_header::GlobalHeader, std::vec::Vec<record::PcapRecord<'a>>)> {
+    pub fn parse_file<'a>(
+        input: &'a [u8],
+    ) -> IResult<
+        &'a [u8],
+        (
+            global_header::GlobalHeader,
+            std::vec::Vec<record::PcapRecord<'a>>,
+        ),
+    > {
         let header_res = global_header::GlobalHeader::parse(input);
 
         header_res.and_then(|r| {
             let (rem, header) = r;
 
-            debug!("Global header version {}.{}, with endianness {:?}", header.version_major(), header.version_minor(), header.endianness());
+            debug!(
+                "Global header version {}.{}, with endianness {:?}",
+                header.version_major(),
+                header.version_minor(),
+                header.endianness()
+            );
 
             CaptureParser::parse_records(rem, header.endianness()).map(|records_res| {
                 let (records_rem, records) = records_res;
@@ -155,7 +164,10 @@ impl CaptureParser {
     /// header (https://wiki.wireshark.org/Development/LibpcapFileFormat). Endianness of the byte
     /// slice must be known.
     ///
-    pub fn parse_records<'a>(input: &'a [u8], endianness: Endianness) -> IResult<&'a [u8], std::vec::Vec<record::PcapRecord<'a>>> {
+    pub fn parse_records<'a>(
+        input: &'a [u8],
+        endianness: Endianness,
+    ) -> IResult<&'a [u8], std::vec::Vec<record::PcapRecord<'a>>> {
         let mut records: std::vec::Vec<record::PcapRecord> = vec![];
         let mut current = input;
 
@@ -163,30 +175,36 @@ impl CaptureParser {
 
         loop {
             match record::PcapRecord::parse(current, endianness) {
-                Ok( (rem, r) ) => {
+                Ok((rem, r)) => {
                     current = rem;
                     trace!("{} bytes left for record parsing", current.len());
                     records.push(r);
                 }
                 Err(nom::Err::Incomplete(nom::Needed::Size(s))) => {
                     debug!("Needed {} bytes for parsing, only had {}", s, current.len());
-                    break
+                    break;
                 }
                 Err(nom::Err::Incomplete(nom::Needed::Unknown)) => {
-                    debug!("Needed unknown number of bytes for parsing, only had {}", current.len());
-                    break
+                    debug!(
+                        "Needed unknown number of bytes for parsing, only had {}",
+                        current.len()
+                    );
+                    break;
                 }
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             }
-        };
+        }
 
-        Ok( (current, records) )
+        Ok((current, records))
     }
 
     ///
     /// Parse a slice of bytes as a single record. Endianness must be known.
     ///
-    pub fn parse_record<'a>(input: &'a [u8], endianness: Endianness) -> IResult<&'a [u8], record::PcapRecord<'a>> {
+    pub fn parse_record<'a>(
+        input: &'a [u8],
+        endianness: Endianness,
+    ) -> IResult<&'a [u8], record::PcapRecord<'a>> {
         record::PcapRecord::parse(input, endianness)
     }
 }
@@ -195,15 +213,11 @@ impl CaptureParser {
 mod tests {
     extern crate test;
 
-    use crate::{
-        CaptureParser,
-        flow::FlowExtraction,
-        record::PcapRecord
-    };
+    use self::test::Bencher;
+    use crate::{flow::FlowExtraction, record::PcapRecord, CaptureParser};
     use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
-    use self::test::Bencher;
 
     const RAW_DATA: &'static [u8] = &[
         0x4du8, 0x3c, 0x2b, 0x1au8, //magic number
@@ -216,7 +230,8 @@ mod tests {
         //record
         0x5Bu8, 0x11u8, 0x6Du8, 0xE3u8, //seconds, 1527868899
         0x00u8, 0x02u8, 0x51u8, 0xF5u8, //microseconds, 152053
-        0x00u8, 0x00u8, 0x00u8, 0x56u8, //actual length, 86: 14 (ethernet) + 20 (ipv4 header) + 20 (tcp header) + 32 (tcp payload)
+        0x00u8, 0x00u8, 0x00u8,
+        0x56u8, //actual length, 86: 14 (ethernet) + 20 (ipv4 header) + 20 (tcp header) + 32 (tcp payload)
         0x00u8, 0x00u8, 0x04u8, 0xD0u8, //original length, 1232
         //ethernet
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
@@ -244,21 +259,18 @@ mod tests {
         0x00u8, 0x00u8, //urgent
         //no options
         //payload
-        0x01u8, 0x02u8, 0x03u8, 0x04u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
+        0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0xfcu8, 0xfdu8, 0xfeu8,
+        0xffu8, //payload, 8 words
     ];
 
     #[test]
     fn file_bytes_parse() {
         let _ = env_logger::try_init();
 
-        let (rem, (header, records)) = CaptureParser::parse_file(RAW_DATA).expect("Failed to parse");
+        let (rem, (header, records)) =
+            CaptureParser::parse_file(RAW_DATA).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
@@ -270,7 +282,8 @@ mod tests {
     fn convert_packet() {
         let _ = env_logger::try_init();
 
-        let (rem, (header, mut records)) = CaptureParser::parse_file(RAW_DATA).expect("Failed to parse");
+        let (rem, (header, mut records)) =
+            CaptureParser::parse_file(RAW_DATA).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
@@ -285,11 +298,17 @@ mod tests {
     fn file_parse() {
         let _ = env_logger::try_init();
 
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
+        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("4SICS-GeekLounge-151020.pcap");
 
-        let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
+        let pcap_reader = std::fs::File::open(pcap_path.clone())
+            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
 
-        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+        let bytes = pcap_reader
+            .bytes()
+            .map(|b| b.unwrap())
+            .collect::<std::vec::Vec<u8>>();
 
         let (rem, (header, records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
 
@@ -301,13 +320,20 @@ mod tests {
     fn file_convert() {
         let _ = env_logger::try_init();
 
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
+        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("4SICS-GeekLounge-151020.pcap");
 
-        let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
+        let pcap_reader = std::fs::File::open(pcap_path.clone())
+            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
 
-        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+        let bytes = pcap_reader
+            .bytes()
+            .map(|b| b.unwrap())
+            .collect::<std::vec::Vec<u8>>();
 
-        let (rem, (header, mut records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+        let (rem, (header, mut records)) =
+            CaptureParser::parse_file(&bytes).expect("Failed to parse");
 
         assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
@@ -321,14 +347,21 @@ mod tests {
     fn bench_parse(b: &mut Bencher) {
         let _ = env_logger::try_init();
 
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
+        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("4SICS-GeekLounge-151020.pcap");
 
-        let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
+        let pcap_reader = std::fs::File::open(pcap_path.clone())
+            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
 
-        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+        let bytes = pcap_reader
+            .bytes()
+            .map(|b| b.unwrap())
+            .collect::<std::vec::Vec<u8>>();
 
         b.iter(|| {
-            let (rem, (header, records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+            let (rem, (header, records)) =
+                CaptureParser::parse_file(&bytes).expect("Failed to parse");
 
             assert_eq!(header.endianness(), Endianness::Little);
             assert_eq!(records.len(), 246137);
@@ -339,14 +372,21 @@ mod tests {
     fn bench_parse_convert(b: &mut Bencher) {
         let _ = env_logger::try_init();
 
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join("4SICS-GeekLounge-151020.pcap");
+        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("4SICS-GeekLounge-151020.pcap");
 
-        let pcap_reader = std::fs::File::open(pcap_path.clone()).expect(&format!("Failed to open pcap path {:?}", pcap_path));
+        let pcap_reader = std::fs::File::open(pcap_path.clone())
+            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
 
-        let bytes = pcap_reader.bytes().map(|b| b.unwrap()).collect::<std::vec::Vec<u8>>();
+        let bytes = pcap_reader
+            .bytes()
+            .map(|b| b.unwrap())
+            .collect::<std::vec::Vec<u8>>();
 
         b.iter(|| {
-            let (rem, (header, mut records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+            let (rem, (header, mut records)) =
+                CaptureParser::parse_file(&bytes).expect("Failed to parse");
 
             assert_eq!(header.endianness(), Endianness::Little);
             assert_eq!(records.len(), 246137);
