@@ -51,9 +51,9 @@ impl<'a> Vxlan<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b Udp<'b>, endianness: nom::Endianness) -> Result<Vxlan<'b>, Error> {
+    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> Result<Vxlan<'b>, Error> {
         /// TODO: Is Endianness really unknown?
-        do_parse!(input.payload(),
+        do_parse!(input,
             flags: u16!(endianness) >>
             group_policy_id: u16!(endianness) >>
             network_identifier: u32!(endianness) >> // actually u24 plus 8 reserved bits.
@@ -119,7 +119,7 @@ mod tests {
         let udp: Udp = Udp::parse(ip.payload()).expect("Invalid udp").1;
         assert_eq!(udp.dst_port(), 4789);
 
-        let vxlan: Vxlan = Vxlan::parse(&udp, nom::Endianness::Big).expect("Invalid VXLAN");
+        let vxlan: Vxlan = Vxlan::parse(&udp.payload(), nom::Endianness::Big).expect("Invalid VXLAN");
         assert_eq!(vxlan.flags(), 0x0800);
         assert_eq!(vxlan.network_identifier(), 123);
 
@@ -154,7 +154,7 @@ mod tests {
         let udp: Udp = Udp::parse(ip.payload()).expect("Invalid udp").1;
         assert_eq!(udp.dst_port(), 5300);
 
-        let vxlan = Vxlan::parse(&udp, nom::Endianness::Big);
+        let vxlan = Vxlan::parse(&udp.payload(), nom::Endianness::Big);
         println!("{:?}", vxlan);
         assert!(vxlan.is_err(), "Should not parse as VXLan")
 
