@@ -1,31 +1,13 @@
 use crate::{
-    errors::{
-        Error,
-        ErrorKind
-    },
-    flow::{
-        Device,
-        Flow,
-        FlowExtraction
-    },
-    layer2::{
-        Layer2,
-        Layer2FlowInfo,
-        ethernet::Ethernet
-    }
+    errors::{Error, ErrorKind},
+    flow::{Device, Flow, FlowExtraction},
+    layer2::{ethernet::Ethernet, Layer2, Layer2FlowInfo},
 };
 
 use log::*;
-use nom::{
-    *,
-    Err as NomError,
-    ErrorKind as NomErrorKind
-};
+use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 
-use std::{
-    self,
-    convert::TryFrom
-};
+use std::{self, convert::TryFrom};
 
 ///
 /// Pcap record associated with a libpcap capture
@@ -35,7 +17,7 @@ pub struct PcapRecord<'a> {
     actual_length: u32,
     original_length: u32,
     payload: &'a [u8],
-    flow: Option<Flow>
+    flow: Option<Flow>,
 }
 
 impl<'a> Default for PcapRecord<'a> {
@@ -45,7 +27,7 @@ impl<'a> Default for PcapRecord<'a> {
             actual_length: 0,
             original_length: 0,
             payload: &[0u8; 0],
-            flow: None
+            flow: None,
         }
     }
 }
@@ -60,20 +42,25 @@ impl<'a> PcapRecord<'a> {
     pub fn original_length(&self) -> u32 {
         self.original_length
     }
-    pub fn payload(&self) -> &[u8] { &self.payload }
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
+    }
 
     ///
     /// Convert a packet time (seconds and partial second microseconds) to a system time (offset from epoch)
     ///
     pub fn convert_packet_time(ts_seconds: u32, ts_microseconds: u32) -> std::time::SystemTime {
-        let offset = std::time::Duration::from_secs(ts_seconds as u64) + std::time::Duration::from_micros(ts_microseconds as u64);
+        let offset = std::time::Duration::from_secs(ts_seconds as u64)
+            + std::time::Duration::from_micros(ts_microseconds as u64);
         std::time::UNIX_EPOCH + offset
     }
 
     ///
     /// Utility function to convert a vector of records to flows, unless an error is encountered in stream conversion
     ///
-    pub fn convert_records<'b>(records: std::vec::Vec<PcapRecord<'b>>) -> std::vec::Vec<PcapRecord<'b>> {
+    pub fn convert_records<'b>(
+        records: std::vec::Vec<PcapRecord<'b>>,
+    ) -> std::vec::Vec<PcapRecord<'b>> {
         let mut records = records;
         let mut results = vec![];
 
@@ -83,7 +70,7 @@ impl<'a> PcapRecord<'a> {
                     Ok(f) => {
                         r.flow = Some(f);
                         results.push(r);
-                    },
+                    }
                     Err(e) => {
                         debug!("Failed to extract stream: {}", e);
                     }
@@ -100,35 +87,35 @@ impl<'a> PcapRecord<'a> {
         timestamp: std::time::SystemTime,
         actual_length: u32,
         original_length: u32,
-        payload: &'a [u8]
+        payload: &'a [u8],
     ) -> PcapRecord<'a> {
         PcapRecord {
             timestamp: timestamp,
             actual_length: actual_length,
             original_length: original_length,
             payload: payload,
-            flow: None
+            flow: None,
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], PcapRecord<'b>> {
-        do_parse!(input,
-
-            ts_seconds: u32!(endianness) >>
-            ts_microseconds: u32!(endianness) >>
-            actual_length: u32!(endianness) >>
-            original_length: u32!(endianness) >>
-            payload: take!(actual_length) >>
-
-            (
-                PcapRecord {
+    pub fn parse<'b>(
+        input: &'b [u8],
+        endianness: nom::Endianness,
+    ) -> nom::IResult<&'b [u8], PcapRecord<'b>> {
+        do_parse!(
+            input,
+            ts_seconds: u32!(endianness)
+                >> ts_microseconds: u32!(endianness)
+                >> actual_length: u32!(endianness)
+                >> original_length: u32!(endianness)
+                >> payload: take!(actual_length)
+                >> (PcapRecord {
                     timestamp: PcapRecord::convert_packet_time(ts_seconds, ts_microseconds),
                     actual_length: actual_length,
                     original_length: original_length,
                     payload: payload,
                     flow: None
-                }
-            )
+                })
         )
     }
 }
@@ -141,21 +128,21 @@ impl<'a> FlowExtraction for PcapRecord<'a> {
 
 impl<'a> std::fmt::Display for PcapRecord<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.timestamp.duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| {
-                std::fmt::Error
-            })
+        self.timestamp
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| std::fmt::Error)
             .and_then(|d| {
-                write!(f, "Timestamp={}{}   Length={}   Original Length={}",
-                       d.as_secs(),
-                       d.subsec_millis(),
-                       self.actual_length,
-                       self.original_length
-                ).and_then(|_| {
+                write!(
+                    f,
+                    "Timestamp={}{}   Length={}   Original Length={}",
+                    d.as_secs(),
+                    d.subsec_millis(),
+                    self.actual_length,
+                    self.original_length
+                )
+                .and_then(|_| {
                     if let Some(ref flw) = self.flow {
-                        write!(f, "   Flow=").and_then(|_| {
-                            flw.fmt(f)
-                        })
+                        write!(f, "   Flow=").and_then(|_| flw.fmt(f))
                     } else {
                         write!(f, "   Flow=None")
                     }
@@ -173,7 +160,8 @@ mod tests {
     const RAW_DATA: &'static [u8] = &[
         0x5Bu8, 0x11u8, 0x6Du8, 0xE3u8, //seconds, 1527868899
         0x00u8, 0x02u8, 0x51u8, 0xF5u8, //microseconds, 152053
-        0x00u8, 0x00u8, 0x00u8, 0x56u8, //actual length, 86: 14 (ethernet) + 20 (ipv4 header) + 20 (tcp header) + 32 (tcp payload)
+        0x00u8, 0x00u8, 0x00u8,
+        0x56u8, //actual length, 86: 14 (ethernet) + 20 (ipv4 header) + 20 (tcp header) + 32 (tcp payload)
         0x00u8, 0x00u8, 0x04u8, 0xD0u8, //original length, 1232
         //ethernet
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
@@ -201,23 +189,24 @@ mod tests {
         0x00u8, 0x00u8, //urgent
         //no options
         //payload
-        0x01u8, 0x02u8, 0x03u8, 0x04u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
+        0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0xfcu8, 0xfdu8, 0xfeu8,
+        0xffu8, //payload, 8 words
     ];
 
     #[test]
     fn display_record() {
         let _ = env_logger::try_init();
 
-        let record = PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse").1;
+        let record = PcapRecord::parse(RAW_DATA, nom::Endianness::Big)
+            .expect("Could not parse")
+            .1;
 
-        assert_eq!(format!("{}", record), "Timestamp=1527868899152   Length=86   Original Length=1232   Flow=None");
+        assert_eq!(
+            format!("{}", record),
+            "Timestamp=1527868899152   Length=86   Original Length=1232   Flow=None"
+        );
     }
 
     #[test]
@@ -226,7 +215,8 @@ mod tests {
 
         let ts = PcapRecord::convert_packet_time(1527868899, 152053);
 
-        let offset = std::time::Duration::from_secs(1527868899) + std::time::Duration::from_micros(152053);
+        let offset =
+            std::time::Duration::from_secs(1527868899) + std::time::Duration::from_micros(152053);
         assert_eq!(ts, std::time::UNIX_EPOCH + offset);
     }
 
@@ -234,11 +224,13 @@ mod tests {
     fn parse_record() {
         let _ = env_logger::try_init();
 
-        let (rem, record) = PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse");
+        let (rem, record) =
+            PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse");
 
         assert!(rem.is_empty());
 
-        let offset = std::time::Duration::from_secs(1527868899) + std::time::Duration::from_micros(152053);
+        let offset =
+            std::time::Duration::from_secs(1527868899) + std::time::Duration::from_micros(152053);
         assert_eq!(*record.timestamp(), std::time::UNIX_EPOCH + offset);
         assert_eq!(record.actual_length(), 86);
         assert_eq!(record.original_length(), 1232);
@@ -248,7 +240,8 @@ mod tests {
     fn convert_record() {
         let _ = env_logger::try_init();
 
-        let (rem, mut record) = PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse");
+        let (rem, mut record) =
+            PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse");
 
         assert!(rem.is_empty());
 

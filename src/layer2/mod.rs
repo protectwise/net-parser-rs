@@ -1,7 +1,4 @@
-use crate::{
-    common::*,
-    layer3::Layer3FlowInfo
-};
+use crate::{common::*, layer3::Layer3FlowInfo};
 
 pub mod ethernet;
 
@@ -9,7 +6,7 @@ pub mod ethernet;
 /// Layer2 types that can be parsed
 ///
 pub enum Layer2<'a> {
-    Ethernet(ethernet::Ethernet<'a>)
+    Ethernet(ethernet::Ethernet<'a>),
 }
 
 ///
@@ -19,5 +16,5 @@ pub struct Layer2FlowInfo {
     pub src_mac: MacAddress,
     pub dst_mac: MacAddress,
     pub vlan: Vlan,
-    pub layer3: Layer3FlowInfo
+    pub layer3: Layer3FlowInfo,
 }

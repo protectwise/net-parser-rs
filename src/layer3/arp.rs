@@ -1,7 +1,7 @@
 use crate::{
     common::{MacAddress, MAC_LENGTH},
     errors::{self, Error, ErrorKind},
-    layer3::{Layer3FlowInfo},
+    layer3::Layer3FlowInfo,
     layer4::{tcp::*, udp::*, Layer4, Layer4FlowInfo},
 };
 
