@@ -51,7 +51,7 @@ impl<'a> Vxlan<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> Result<Vxlan<'b>, Error> {
+    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], Vxlan<'b>> {
         /// TODO: Is Endianness really unknown?
         do_parse!(input,
             flags: u16!(endianness) >>
@@ -59,17 +59,14 @@ impl<'a> Vxlan<'a> {
             network_identifier: u32!(endianness) >> // actually u24 plus 8 reserved bits.
             //reserved: be_u8 >> // accounted for in bytes captured under network_identifier
             payload: rest >> (
-                (flags, group_policy_id, network_identifier, payload)
+                Vxlan {
+                    flags: flags,
+                    group_policy_id: group_policy_id,
+                    network_identifier: network_identifier>>8,
+                    payload: payload
+                }
             )
-        ).map_err(Error::from)
-            .and_then(|(_, parsed)| {
-                Ok(Vxlan {
-                    flags: parsed.0,
-                    group_policy_id: parsed.1,
-                    network_identifier: parsed.2>>8,
-                    payload: parsed.3
-                })
-            })
+        )
     }
 }
 
@@ -119,7 +116,8 @@ mod tests {
         let udp: Udp = Udp::parse(ip.payload()).expect("Invalid udp").1;
         assert_eq!(udp.dst_port(), 4789);
 
-        let vxlan: Vxlan = Vxlan::parse(&udp.payload(), nom::Endianness::Big).expect("Invalid VXLAN");
+        let (remainder, vxlan) = Vxlan::parse(&udp.payload(), nom::Endianness::Big).expect("Invalid VXLAN");
+        assert_eq!(remainder.len(), 0);
         assert_eq!(vxlan.flags(), 0x0800);
         assert_eq!(vxlan.network_identifier(), 123);
 
@@ -155,7 +153,6 @@ mod tests {
         assert_eq!(udp.dst_port(), 5300);
 
         let vxlan = Vxlan::parse(&udp.payload(), nom::Endianness::Big);
-        println!("{:?}", vxlan);
         assert!(vxlan.is_err(), "Should not parse as VXLan")
 
     }
