@@ -7,7 +7,7 @@ pub mod vxlan;
 ///
 pub enum Layer4<'a> {
     Tcp(tcp::Tcp<'a>),
-    Udp(udp::Udp<'a>)
+    Udp(udp::Udp<'a>),
 }
 
 ///
@@ -15,5 +15,5 @@ pub enum Layer4<'a> {
 ///
 pub struct Layer4FlowInfo {
     pub dst_port: u16,
-    pub src_port: u16
+    pub src_port: u16,
 }

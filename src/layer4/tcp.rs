@@ -1,19 +1,11 @@
 use crate::{
-    errors::{
-        self,
-        Error,
-        ErrorKind
-    },
+    errors::{self, Error, ErrorKind},
     flow,
-    layer4::Layer4FlowInfo
+    layer4::Layer4FlowInfo,
 };
 
 use log::*;
-use nom::{
-    *,
-    Err as NomError,
-    ErrorKind as NomErrorKind
-};
+use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 use std;
 use std::convert::TryFrom;
 
@@ -26,7 +18,7 @@ pub struct Tcp<'a> {
     sequence_number: u32,
     acknowledgement_number: u32,
     flags: u16,
-    payload: &'a [u8]
+    payload: &'a [u8],
 }
 
 impl<'a> Tcp<'a> {
@@ -51,7 +43,7 @@ impl<'a> Tcp<'a> {
         sequence_number: u32,
         acknowledgement_number: u32,
         flags: u16,
-        payload: &'a [u8]
+        payload: &'a [u8],
     ) -> Tcp {
         Tcp {
             dst_port,
@@ -59,44 +51,42 @@ impl<'a> Tcp<'a> {
             sequence_number,
             acknowledgement_number,
             flags,
-            payload
+            payload,
         }
     }
 
     pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], Tcp<'b>> {
         trace!("Available={}", input.len());
 
-        do_parse!(input,
-
-            src_port: be_u16 >>
-            dst_port: be_u16 >>
-            sequence_number: be_u32 >>
-            acknowledgement_number: be_u32 >>
-            header_length_and_flags: map_res!(be_u16, |v| {
-                let hl = Tcp::extract_length(v);
-                trace!("Header Length={}", hl);
-                if hl >= MINIMUM_HEADER_BYTES && hl <= MAXIMUM_HEADER_BYTES {
-                    let flags = v & 0x01FF; //take lower 9 bits
-                    Ok( (hl, flags) ) as Result<(usize, u16), nom::Context<&[u8]>>
-                } else {
-                    Err(error_position!(input, NomErrorKind::CondReduce::<u32>))
-                }
-            }) >>
-            window: be_u16 >>
-            check: be_u16 >>
-            urgent: be_u16 >>
-            options: take!(header_length_and_flags.0 - MINIMUM_HEADER_BYTES) >>
-            payload: rest >>
-            (
-                Tcp {
+        do_parse!(
+            input,
+            src_port: be_u16
+                >> dst_port: be_u16
+                >> sequence_number: be_u32
+                >> acknowledgement_number: be_u32
+                >> header_length_and_flags: map_res!(be_u16, |v| {
+                    let hl = Tcp::extract_length(v);
+                    trace!("Header Length={}", hl);
+                    if hl >= MINIMUM_HEADER_BYTES && hl <= MAXIMUM_HEADER_BYTES {
+                        let flags = v & 0x01FF; //take lower 9 bits
+                        Ok((hl, flags)) as Result<(usize, u16), nom::Context<&[u8]>>
+                    } else {
+                        Err(error_position!(input, NomErrorKind::CondReduce::<u32>))
+                    }
+                })
+                >> window: be_u16
+                >> check: be_u16
+                >> urgent: be_u16
+                >> options: take!(header_length_and_flags.0 - MINIMUM_HEADER_BYTES)
+                >> payload: rest
+                >> (Tcp {
                     dst_port: dst_port,
                     src_port: src_port,
                     sequence_number: sequence_number,
                     acknowledgement_number: acknowledgement_number,
                     flags: header_length_and_flags.1,
                     payload: payload.into()
-                }
-            )
+                })
         )
     }
 }
@@ -107,7 +97,7 @@ impl<'a> TryFrom<Tcp<'a>> for Layer4FlowInfo {
     fn try_from(value: Tcp<'a>) -> Result<Self, Self::Error> {
         Ok(Layer4FlowInfo {
             dst_port: value.dst_port,
-            src_port: value.src_port
+            src_port: value.src_port,
         })
     }
 }
@@ -131,14 +121,10 @@ mod tests {
         0x00u8, 0x00u8, //urgent
         //no options
         //payload
-        0x01u8, 0x02u8, 0x03u8, 0x04u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0x00u8, 0x00u8, 0x00u8, 0x00u8,
-        0xfcu8, 0xfdu8, 0xfeu8, 0xffu8 //payload, 8 words
+        0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+        0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0xfcu8, 0xfdu8, 0xfeu8,
+        0xffu8, //payload, 8 words
     ];
 
     #[test]
@@ -157,14 +143,17 @@ mod tests {
 
         assert_eq!(l4.dst_port(), 80);
         assert_eq!(l4.src_port(), 50871);
-        assert_eq!(l4.payload(), [0x01u8, 0x02u8, 0x03u8, 0x04u8,
-            0x00u8, 0x00u8, 0x00u8, 0x00u8,
-            0x00u8, 0x00u8, 0x00u8, 0x00u8,
-            0x00u8, 0x00u8, 0x00u8, 0x00u8,
-            0x00u8, 0x00u8, 0x00u8, 0x00u8,
-            0x00u8, 0x00u8, 0x00u8, 0x00u8,
-            0x00u8, 0x00u8, 0x00u8, 0x00u8,
-            0xfcu8, 0xfdu8, 0xfeu8, 0xffu8], "Payload Mismatch: {:x}", l4.payload().as_hex());
+        assert_eq!(
+            l4.payload(),
+            [
+                0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+                0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+                0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0xfcu8, 0xfdu8,
+                0xfeu8, 0xffu8
+            ],
+            "Payload Mismatch: {:x}",
+            l4.payload().as_hex()
+        );
     }
 
     #[test]
