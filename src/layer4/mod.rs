@@ -1,5 +1,6 @@
 pub mod tcp;
 pub mod udp;
+pub mod vxlan;
 
 ///
 /// Available Layer 4 representations
