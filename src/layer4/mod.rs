@@ -1,5 +1,6 @@
 pub mod tcp;
 pub mod udp;
+pub mod icmp;
 pub mod vxlan;
 
 ///
@@ -8,6 +9,7 @@ pub mod vxlan;
 pub enum Layer4<'a> {
     Tcp(tcp::Tcp<'a>),
     Udp(udp::Udp<'a>),
+    Icmp(icmp::Icmp<'a>),
 }
 
 ///

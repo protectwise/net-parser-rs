@@ -9,6 +9,7 @@ use log::*;
 use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 
 use std::{self, convert::TryFrom};
+use crate::layer4::icmp::Icmp;
 
 const ADDRESS_LENGTH: usize = 4;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
@@ -187,6 +188,21 @@ impl<'a> TryFrom<IPv4<'a>> for Layer3FlowInfo {
                         ))
                     }
                 }),
+            InternetProtocolId::ICMP => Icmp::parse(value.payload)
+                .map_err(|e| {
+                    let err: Self::Error = e.into();
+                    err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                })
+                .and_then(|r| {
+                    let (rem, l4) = r;
+                    if rem.is_empty() {
+                        Layer4FlowInfo::try_from(l4)
+                    } else {
+                        Err(errors::Error::from_kind(
+                            errors::ErrorKind::L3IncompleteParse(rem.len()),
+                        ))
+                    }
+                }),
             _ => Err(errors::Error::from_kind(errors::ErrorKind::IPv4Type(
                 value.protocol,
             ))),
@@ -207,6 +223,8 @@ mod tests {
     use self::hex_slice::AsHex;
 
     use super::*;
+    use crate::tests::util::parse_hex_dump;
+    use crate::layer2::ethernet::Ethernet;
 
     const RAW_DATA: &'static [u8] = &[
         0x45u8, //version and header length
@@ -286,5 +304,45 @@ mod tests {
         );
         assert_eq!(info.layer4.src_port, 50871);
         assert_eq!(info.layer4.dst_port, 80);
+    }
+
+    #[test]
+    fn convert_ipv4_icmp() {
+        let _ = env_logger::try_init();
+
+        // From https://www.cloudshark.org/captures/fe65ed807bc3
+        let bytes = parse_hex_dump(r##"
+            # Frame 1: 74 bytes on wire (592 bits), 74 bytes captured (592 bits)
+            # Ethernet II, Src: Vmware_34:0b:de (00:0c:29:34:0b:de), Dst: Vmware_e0:14:49 (00:50:56:e0:14:49)
+            # Internet Protocol Version 4, Src: 192.168.158.139, Dst: 174.137.42.77
+            # Internet Control Message Protocol
+            #     Type: 8 (Echo (ping) request)
+            #     Code: 0
+            #     Checksum: 0x2a5c [correct]
+            #     Identifier (BE): 512 (0x0200)
+            #     Identifier (LE): 2 (0x0002)
+            #     Sequence number (BE): 8448 (0x2100)
+            #     Sequence number (LE): 33 (0x0021)
+            #     [Response frame: 2]
+            #     Data (32 bytes)
+            0000   00 50 56 e0 14 49 00 0c 29 34 0b de 08 00 45 00  .PV..I..)4....E.
+            0010   00 3c d7 43 00 00 80 01 2b 73 c0 a8 9e 8b ae 89  .<.C....+s......
+            0020   2a 4d 08 00 2a 5c 02 00 21 00 61 62 63 64 65 66  *M..*\..!.abcdef
+            0030   67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76  ghijklmnopqrstuv
+            0040   77 61 62 63 64 65 66 67 68 69                    wabcdefghi
+        "##).expect("Invalid packet definition");
+
+        assert_eq!(bytes.len(), 74);
+
+        let enet = Ethernet::parse(bytes.as_slice()).expect("Invalid ethernet").1;
+        assert_eq!(format!("{}", enet.dst_mac()), "00:50:56:e0:14:49");
+
+        let (rem, l3) = IPv4::parse(enet.payload()).expect("Unable to parse");
+
+        let info = Layer3FlowInfo::try_from(l3).expect("Could not convert to layer 3 info");
+
+        // ICMP does not have ports, so from a flow perspective we treat them as zero (0)
+        assert_eq!(info.layer4.src_port, 0);
+        assert_eq!(info.layer4.dst_port, 0);
     }
 }
