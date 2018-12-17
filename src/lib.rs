@@ -210,7 +210,7 @@ impl CaptureParser {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     extern crate test;
 
     use self::test::Bencher;
@@ -218,6 +218,61 @@ mod tests {
     use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
+
+
+    pub mod util {
+        extern crate hex;
+        extern crate regex;
+        use regex::Regex;
+
+        #[test]
+        fn test_hex_dump() {
+            let bytes = parse_hex_dump(r"
+            # Comment line
+            0090   34 35 36 37                                      4567
+        ").expect("Failed to parse bytes");
+            let b = b"4567".to_vec().into_boxed_slice();
+            assert_eq!(bytes.len(), 4)
+        }
+
+        /// Parses a "Hex + ASCII Dump" from Wireshark to extract the payload bits.
+        /// Example:
+        /// ```rust
+        ///         let bytes = parse_hex_dump(r##"
+        ///            # Frame 3: 148 bytes on wire (1184 bits), 148 bytes captured (1184 bits) on interface 0
+        ///            # Ethernet II, Src: CadmusCo_ae:4d:62 (08:00:27:ae:4d:62), Dst: CadmusCo_f2:1d:8c (08:00:27:f2:1d:8c)
+        ///            # Internet Protocol Version 4, Src: 192.168.56.11, Dst: 192.168.56.12
+        ///            # User Datagram Protocol, Src Port: 48134 (48134), Dst Port: 4789 (4789)
+        ///            # Virtual eXtensible Local Area Network
+        ///            # Ethernet II, Src: ba:09:2b:6e:f8:be (ba:09:2b:6e:f8:be), Dst: 4a:7f:01:3b:a2:71 (4a:7f:01:3b:a2:71)
+        ///            # Internet Protocol Version 4, Src: 10.0.0.1, Dst: 10.0.0.2
+        ///            # Internet Control Message Protocol
+        ///            0000   08 00 27 f2 1d 8c 08 00 27 ae 4d 62 08 00 45 00  ..'.....'.Mb..E.
+        ///            0010   00 86 d9 99 40 00 40 11 6f 65 c0 a8 38 0b c0 a8  ....@.@.oe..8...
+        ///            0020   38 0c bc 06 12 b5 00 72 00 00 08 00 00 00 00 00  8......r........
+        ///            0030   7b 00 4a 7f 01 3b a2 71 ba 09 2b 6e f8 be 08 00  {.J..;.q..+n....
+        ///            0040   45 00 00 54 2f 4f 40 00 40 01 f7 57 0a 00 00 01  E..T/O@.@..W....
+        ///            0050   0a 00 00 02 08 00 4c 8a 0d 3d 00 01 a3 8c 7c 57  ......L..=....|W
+        ///            0060   00 00 00 00 b5 80 0a 00 00 00 00 00 10 11 12 13  ................
+        ///            0070   14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20 21 22 23  ............ !"#
+        ///            0080   24 25 26 27 28 29 2a 2b 2c 2d 2e 2f 30 31 32 33  $%&'()*+,-./0123
+        ///            0090   34 35 36 37                                      4567
+        ///        "##).unwrap();
+        ///        assert_eq!(bytes.len(), 148);
+        /// ```
+        pub fn parse_hex_dump(input: &str) -> Result<Vec<u8>, hex::FromHexError> {
+            let hex_reg: Regex = Regex::new(r"(?m)^\s*[0-9a-fA-F]{3,}\s+((?:[0-9a-fA-F]{2}\s){1,16}).*?$").unwrap();
+
+            let mut response = vec!();
+            for cap in hex_reg.captures_iter(input) {
+                let c = Vec::from(cap[1].replace(" ", ""));
+
+                let mut decode = hex::decode(c)?;
+                response.append(&mut decode);
+            }
+            Ok(response)
+        }
+    }
 
     const RAW_DATA: &'static [u8] = &[
         0x4du8, 0x3c, 0x2b, 0x1au8, //magic number
