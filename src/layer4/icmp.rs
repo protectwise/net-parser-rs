@@ -1,6 +1,9 @@
 
 use nom::*;
 use std::num::Wrapping;
+use std::convert::TryFrom;
+use crate::layer4::Layer4FlowInfo;
+use crate::errors;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u8)]
@@ -161,6 +164,18 @@ impl <'a> Icmp<'a> {
 
 }
 
+impl<'a> TryFrom<Icmp<'a>> for Layer4FlowInfo {
+    type Error = errors::Error;
+
+    fn try_from(value: Icmp<'a>) -> Result<Self, Self::Error> {
+        Ok(Layer4FlowInfo {
+            dst_port: 0,
+            src_port: 0,
+        })
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -230,6 +245,7 @@ mod tests {
 
     #[test]
     fn bad_checksum() {
+        // Same packet as previous, with checksum mangled to 0xDEAD
         let bytes = parse_hex_dump(r##"
             # Frame 1: 74 bytes on wire (592 bits), 74 bytes captured (592 bits)
             # Ethernet II, Src: Vmware_34:0b:de (00:0c:29:34:0b:de), Dst: Vmware_e0:14:49 (00:50:56:e0:14:49)
