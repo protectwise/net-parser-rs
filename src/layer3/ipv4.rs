@@ -1,7 +1,6 @@
 use crate::{
-    errors::{self, Error, ErrorKind},
     layer3::{InternetProtocolId, Layer3FlowInfo},
-    layer4::{tcp::*, udp::*, Layer4, Layer4FlowInfo},
+    layer4::{tcp::*, udp::*, Layer4, Layer4FlowInfo}
 };
 
 use arrayref::array_ref;
@@ -12,6 +11,35 @@ use std::{self, convert::TryFrom};
 
 const ADDRESS_LENGTH: usize = 4;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
+
+pub mod errors {
+    use crate::layer3;
+    use crate::layer4;
+    use crate::nom_error;
+    use failure::Fail;
+
+    #[derive(Debug, Fail)]
+    pub enum Error {
+        #[fail(display = "Nom error while parsing IPv4")]
+        Nom(#[fail(cause)] nom_error::Error),
+        #[fail(display = "Layer4 error while parsing IPv4")]
+        L4(#[fail(cause)] layer4::errors::Error),
+        #[fail(display = "Incomplete parse while parsing IPv4: {}", size)]
+        Incomplete {
+            size: usize
+        },
+        #[fail(display = "Unknown type while parsing IPv4: {:?}", id)]
+        InternetProtocolId {
+            id: layer3::InternetProtocolId
+        },
+    }
+
+    impl From<layer4::errors::Error> for Error {
+        fn from(v: layer4::errors::Error) -> Self {
+            Error::L4(v)
+        }
+    }
+}
 
 pub struct IPv4<'a> {
     dst_ip: std::net::IpAddr,
@@ -142,10 +170,11 @@ impl<'a> IPv4<'a> {
             if version == 4 {
                 IPv4::parse_ipv4(rem, input_len, version_and_length)
             } else {
-                Err(NomError::convert(NomError::Error(error_position!(
+                let nom_error = NomError::Error(error_position!(
                     input,
                     NomErrorKind::CondReduce::<u32>
-                ))))
+                ));
+                Err(nom_error)
             }
         })
     }
@@ -157,39 +186,41 @@ impl<'a> TryFrom<IPv4<'a>> for Layer3FlowInfo {
     fn try_from(value: IPv4<'a>) -> Result<Self, Self::Error> {
         debug!("Creating stream info from {:?}", value.protocol);
         let l4 = match value.protocol.clone() {
-            InternetProtocolId::Tcp => Tcp::parse(value.payload())
-                .map_err(|e| {
-                    let err: Self::Error = e.into();
-                    err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+            InternetProtocolId::Tcp => {
+                Tcp::parse(value.payload()).map_err(|ref e| {
+                    let l4_error = crate::layer4::tcp::errors::Error::Nom(e.into());
+                    errors::Error::L4(l4_error.into())
                 })
                 .and_then(|r| {
                     let (rem, l4) = r;
                     if rem.is_empty() {
-                        Layer4FlowInfo::try_from(l4)
+                        Layer4FlowInfo::try_from(l4).map_err(|e| errors::Error::L4(e.into()))
                     } else {
-                        Err(errors::Error::from_kind(
-                            errors::ErrorKind::L3IncompleteParse(rem.len()),
-                        ))
+                        Err(errors::Error::Incomplete {
+                            size: rem.len()
+                        })
                     }
-                }),
-            InternetProtocolId::Udp => Udp::parse(value.payload())
-                .map_err(|e| {
-                    let err: Self::Error = e.into();
-                    err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                })
+            }
+            InternetProtocolId::Udp => {
+                Udp::parse(value.payload()).map_err(|ref e| {
+                    let l4_error = crate::layer4::tcp::errors::Error::Nom(e.into());
+                    errors::Error::L4(l4_error.into())
                 })
                 .and_then(|r| {
                     let (rem, l4) = r;
                     if rem.is_empty() {
-                        Layer4FlowInfo::try_from(l4)
+                        Layer4FlowInfo::try_from(l4).map_err(|e| errors::Error::L4(e.into()))
                     } else {
-                        Err(errors::Error::from_kind(
-                            errors::ErrorKind::L3IncompleteParse(rem.len()),
-                        ))
+                        Err(errors::Error::Incomplete {
+                            size: rem.len()
+                        })
                     }
-                }),
-            _ => Err(errors::Error::from_kind(errors::ErrorKind::IPv4Type(
-                value.protocol,
-            ))),
+                })
+            }
+            _ => Err(errors::Error::InternetProtocolId {
+                id: value.protocol
+            }),
         }?;
 
         Ok(Layer3FlowInfo {
@@ -264,6 +295,7 @@ mod tests {
 
         assert!(is_tcp);
     }
+
     #[test]
     fn convert_ipv4() {
         let _ = env_logger::try_init();

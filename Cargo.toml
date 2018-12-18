@@ -13,7 +13,8 @@ categories=["encoding","network-programming","parsing"]
 [dependencies]
 arrayref = "~0.3"
 nom = "~4.1"
-error-chain = "~0.12"
+failure = "~0.1"
+failure_derive = "~0.1"
 futures = "~0.1"
 log = "~0.4"
 

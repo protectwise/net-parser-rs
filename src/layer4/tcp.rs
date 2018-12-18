@@ -1,5 +1,4 @@
 use crate::{
-    errors::{self, Error, ErrorKind},
     flow,
     layer4::Layer4FlowInfo,
 };
@@ -11,6 +10,17 @@ use std::convert::TryFrom;
 
 const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
 const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
+
+pub mod errors {
+    use crate::nom_error;
+    use failure::Fail;
+
+    #[derive(Debug, Fail)]
+    pub enum Error {
+        #[fail(display = "Nom error while parsing TCP")]
+        Nom(#[fail(cause)] nom_error::Error),
+    }
+}
 
 pub struct Tcp<'a> {
     dst_port: u16,

@@ -114,7 +114,7 @@ mod tests {
 
         let flows = fut_flows.wait().expect("Failed to run");
 
-        assert_eq!(flows.len(), 129643);
+        assert_eq!(flows.len(), 236527);
     }
 
     #[bench]
@@ -146,7 +146,7 @@ mod tests {
 
             let flows = fut_flows.wait().expect("Failed to run");
 
-            assert_eq!(flows.len(), 129643);
+            assert_eq!(flows.len(), 236527);
         });
     }
 }

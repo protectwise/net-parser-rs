@@ -2,7 +2,7 @@ use log::*;
 
 use crate::{
     common::{MacAddress, Vlan, MAC_LENGTH},
-    errors::{Error, ErrorKind},
+    errors::Error,
     layer2::{ethernet::Ethernet, Layer2FlowInfo},
     record::PcapRecord,
 };
@@ -58,14 +58,20 @@ pub trait FlowExtraction {
     fn extract_flow(&self) -> Result<Flow, Error> {
         trace!("Creating stream from payload of {}B", self.payload().len());
 
-        let l2 = Ethernet::parse(self.payload())
-            .map_err(Error::from)
+        let payload_ref = self.payload();
+
+        let l2 = Ethernet::parse(payload_ref)
+            .map_err(|ref e| {
+                error!("Error parsing ethernet {:?}", e);
+                let l2_error = crate::layer2::ethernet::errors::Error::Nom(e.into());
+                Error::L2(l2_error.into())
+            })
             .and_then(|r| {
                 let (rem, l2) = r;
                 if rem.is_empty() {
-                    Layer2FlowInfo::try_from(l2)
+                    Layer2FlowInfo::try_from(l2).map_err(|e| Error::L2(e.into()))
                 } else {
-                    Err(Error::from_kind(ErrorKind::L2IncompleteParse(rem.len())))
+                    Err(Error::Incomplete { size: rem.len() })
                 }
             })?;
 

@@ -1,5 +1,4 @@
 use crate::{
-    errors::Error,
     record::{
         PcapRecord
     },
@@ -9,10 +8,19 @@ use crate::{
 
 use nom::{
     *,
-    Err as NomError,
-    ErrorKind as NomErrorKind,
     IResult
 };
+
+pub mod errors {
+    use crate::nom_error;
+    use failure::Fail;
+
+    #[derive(Debug, Fail)]
+    pub enum Error {
+        #[fail(display = "Nom error while parsing Vxlan")]
+        Nom(#[fail(cause)] nom_error::Error),
+    }
+}
 
 #[derive(Debug)]
 pub struct Vxlan<'a> {

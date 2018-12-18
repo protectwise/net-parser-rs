@@ -1,5 +1,4 @@
 use crate::{
-    errors::{Error, ErrorKind},
     flow::{Device, Flow, FlowExtraction},
     layer2::{ethernet::Ethernet, Layer2, Layer2FlowInfo},
 };

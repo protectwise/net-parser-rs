@@ -1,6 +1,5 @@
 use crate::{
     common::{MacAddress, MAC_LENGTH},
-    errors::{self, Error, ErrorKind},
     layer3::Layer3FlowInfo,
     layer4::{tcp::*, udp::*, Layer4, Layer4FlowInfo},
 };
@@ -10,6 +9,19 @@ use log::*;
 use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 
 use std::{self, convert::TryFrom};
+
+pub mod errors {
+    use crate::nom_error;
+    use failure::Fail;
+
+    #[derive(Debug, Fail)]
+    pub enum Error {
+        #[fail(display = "Nom error while parsing ARP")]
+        Nom(#[fail(cause)] nom_error::Error),
+        #[fail(display = "ARP cannot be converted to a flow")]
+        Flow,
+    }
+}
 
 pub struct Arp {
     sender_ip: std::net::IpAddr,
@@ -102,7 +114,7 @@ impl TryFrom<Arp> for Layer3FlowInfo {
     type Error = errors::Error;
 
     fn try_from(value: Arp) -> Result<Self, Self::Error> {
-        Err(errors::Error::from_kind(errors::ErrorKind::FlowParse))
+        Err(errors::Error::Flow)
     }
 }
 
