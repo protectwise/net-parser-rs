@@ -159,6 +159,8 @@ impl<'a> TryFrom<IPv6<'a>> for Layer3FlowInfo {
             InternetProtocolId::Tcp => {
                 Tcp::parse(value.payload())
                     .map_err(|ref e| {
+                        #[cfg(feature = "log-errors")]
+                        error!("Error parsing tcp {:?}", e);
                         let l4_error = crate::layer4::tcp::errors::Error::Nom(e.into());
                         errors::Error::L4(l4_error.into())
                     })
@@ -175,6 +177,8 @@ impl<'a> TryFrom<IPv6<'a>> for Layer3FlowInfo {
             }
             InternetProtocolId::Udp => {
                 Udp::parse(value.payload()).map_err(|ref e| {
+                    #[cfg(feature = "log-errors")]
+                    error!("Error parsing udp {:?}", e);
                     let l4_error = crate::layer4::udp::errors::Error::Nom(e.into());
                     errors::Error::L4(l4_error.into())
                 })

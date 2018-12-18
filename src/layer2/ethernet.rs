@@ -248,6 +248,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
             match l3_id {
                 Layer3Id::IPv4 => IPv4::parse(&value.payload)
                     .map_err(|ref e| {
+                        #[cfg(feature = "log-errors")]
                         error!("Error parsing ipv4 {:?}", e);
                         let l3_error = crate::layer3::ipv4::errors::Error::Nom(e.into());
                         errors::Error::L3(l3_error.into())
@@ -264,6 +265,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                     }),
                 Layer3Id::IPv6 => IPv6::parse(&value.payload)
                     .map_err(|ref e| {
+                        #[cfg(feature = "log-errors")]
                         error!("Error parsing ipv6 {:?}", e);
                         let l3_error = crate::layer3::ipv6::errors::Error::Nom(e.into());
                         errors::Error::L3(l3_error.into())
@@ -280,6 +282,7 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
                     }),
                 Layer3Id::Arp => Arp::parse(&value.payload)
                     .map_err(|ref e| {
+                        #[cfg(feature = "log-errors")]
                         error!("Error parsing arp {:?}", e);
                         let l3_error = crate::layer3::arp::errors::Error::Nom(e.into());
                         errors::Error::L3(l3_error.into())

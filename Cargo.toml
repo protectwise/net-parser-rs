@@ -10,6 +10,12 @@ readme = "README.md"
 keywords=["pcap","packet","network"]
 categories=["encoding","network-programming","parsing"]
 
+[features]
+default = []
+
+# Log extraction errors
+log-errors = []
+
 [dependencies]
 arrayref = "~0.3"
 nom = "~4.1"

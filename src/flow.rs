@@ -62,6 +62,7 @@ pub trait FlowExtraction {
 
         let l2 = Ethernet::parse(payload_ref)
             .map_err(|ref e| {
+                #[cfg(feature = "log-errors")]
                 error!("Error parsing ethernet {:?}", e);
                 let l2_error = crate::layer2::ethernet::errors::Error::Nom(e.into());
                 Error::L2(l2_error.into())
