@@ -18,6 +18,9 @@ pub mod errors {
         #[fail(display = "Nom error while parsing UDP")]
         Nom(#[fail(cause)] nom_error::Error),
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }
 
 pub struct Udp<'a> {

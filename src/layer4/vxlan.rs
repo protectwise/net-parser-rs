@@ -20,6 +20,9 @@ pub mod errors {
         #[fail(display = "Nom error while parsing Vxlan")]
         Nom(#[fail(cause)] nom_error::Error),
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }
 
 #[derive(Debug)]

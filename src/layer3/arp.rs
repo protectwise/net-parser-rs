@@ -21,6 +21,9 @@ pub mod errors {
         #[fail(display = "ARP cannot be converted to a flow")]
         Flow,
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }
 
 pub struct Arp {

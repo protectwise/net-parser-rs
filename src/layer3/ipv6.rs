@@ -38,6 +38,9 @@ pub mod errors {
             Error::L4(v)
         }
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }
 
 pub struct IPv6<'a> {

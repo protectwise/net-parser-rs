@@ -39,6 +39,9 @@ pub mod errors {
             Error::L3(v)
         }
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }
 
 ///

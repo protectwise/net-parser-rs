@@ -109,4 +109,7 @@ pub mod errors {
             Error::IPv6(v)
         }
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }

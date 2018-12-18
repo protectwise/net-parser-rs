@@ -34,4 +34,7 @@ pub mod errors {
             Error::Ethernet(v)
         }
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }

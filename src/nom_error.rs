@@ -12,6 +12,9 @@ pub enum Error {
     }
 }
 
+unsafe impl Sync for Error {}
+unsafe impl Send for Error {}
+
 impl<I, E> From<&nom::Err<I, E>> for Error
     where
         I: std::fmt::Debug,

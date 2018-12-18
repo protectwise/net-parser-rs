@@ -34,6 +34,9 @@ pub mod errors {
         },
     }
 
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
+
     impl From<layer4::errors::Error> for Error {
         fn from(v: layer4::errors::Error) -> Self {
             Error::L4(v)

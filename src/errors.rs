@@ -18,3 +18,6 @@ impl From<layer2::errors::Error> for Error {
         Error::L2(v)
     }
 }
+
+unsafe impl Sync for Error {}
+unsafe impl Send for Error {}

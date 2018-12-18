@@ -51,4 +51,7 @@ pub mod errors {
             Error::Vxlan(v)
         }
     }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
 }
