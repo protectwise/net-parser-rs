@@ -1,99 +1,22 @@
 #![allow(unused)]
 #![feature(test, try_from)]
-#![recursion_limit = "128"]
 ///! net-parser-rs
 ///!
 ///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
 ///! associated records.
 ///!
-#[macro_use]
-extern crate error_chain;
-
-pub mod errors {
-    use crate::layer2;
-    use crate::layer3;
-    use std;
-
-    // Create the Error, ErrorKind, ResultExt, and Result types
-    error_chain! {
-        foreign_links {
-            Io(std::io::Error) #[doc = "Error during IO"];
-            Ffi(std::ffi::NulError) #[doc = "Error during FFI conversion"];
-            Utf8(std::str::Utf8Error) #[doc = "Error during UTF8 conversion"];
-        }
-        errors {
-            FlowParse {
-                display("Parsing failure when converting to stream")
-            }
-            NomIncomplete(needed: String) {
-                display("Not enough data to parse, needed {}", needed)
-            }
-            NomError(message: String) {
-                display("Error parsing: {}", message)
-            }
-            IncompleteParse(amt: usize) {
-                display("Incomplete parse of payload, {} bytes remain", amt)
-            }
-            L2IncompleteParse(amt: usize) {
-                display("Incomplete parse of layer2, {} bytes remain", amt)
-            }
-            L3IncompleteParse(amt: usize) {
-                display("Incomplete parse of layer3, {} bytes remain", amt)
-            }
-            L4IncompleteParse(amt: usize) {
-                display("Incomplete parse of layer4, {} bytes remain", amt)
-            }
-            EthernetType(value: layer2::ethernet::EthernetTypeId) {
-                display("Invalid ethernet type {:?}", value)
-            }
-            IPv4Length(value: u8) {
-                display("Invalid IPv4 length {}", value)
-            }
-            IPv4Type(value: layer3::InternetProtocolId) {
-                display("Invalid ipv4 type {:?}", value)
-            }
-            IPv6Type(value: layer3::InternetProtocolId) {
-                display("Invalid ipv6 type {:?}", value)
-            }
-            FlowConversion(why: String) {
-                display("Could not convert to stream {}", why)
-            }
-            NotImplemented {
-                display("Not implemented yet")
-            }
-        }
-    }
-
-    impl<I, E> From<nom::Err<I, E>> for Error
-    where
-        I: std::fmt::Debug,
-        E: std::fmt::Debug,
-    {
-        fn from(err: nom::Err<I, E>) -> Error {
-            match err {
-                nom::Err::Incomplete(nom::Needed::Unknown) => {
-                    Error::from_kind(ErrorKind::NomIncomplete("Unknown".to_string()))
-                }
-                nom::Err::Incomplete(nom::Needed::Size(sz)) => {
-                    Error::from_kind(ErrorKind::NomIncomplete(format!("{}", sz)))
-                }
-                nom::Err::Error(c) => Error::from_kind(ErrorKind::NomError(format!("{:?}", c))),
-                nom::Err::Failure(c) => Error::from_kind(ErrorKind::NomError(format!("{:?}", c))),
-            }
-        }
-    }
-}
 
 pub mod common;
+pub mod errors;
 pub mod flow;
 pub mod global_header;
 pub mod layer2;
 pub mod layer3;
 pub mod layer4;
+pub mod nom_error;
 pub mod record;
 pub mod stream;
 
-use crate::errors::{Error, ErrorKind};
 use log::*;
 use nom::*;
 
@@ -395,7 +318,7 @@ pub mod tests {
 
         let converted_records = PcapRecord::convert_records(records);
 
-        assert_eq!(converted_records.len(), 129643);
+        assert_eq!(converted_records.len(), 236527);
     }
 
     #[bench]
@@ -448,7 +371,7 @@ pub mod tests {
 
             let converted_records = PcapRecord::convert_records(records);
 
-            assert_eq!(converted_records.len(), 129643);
+            assert_eq!(converted_records.len(), 236527);
         });
     }
 }

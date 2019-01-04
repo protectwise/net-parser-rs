@@ -1,8 +1,7 @@
 use crate::{
     common::{MacAddress, Vlan, MAC_LENGTH},
-    errors::{self, Error, ErrorKind},
     layer2::Layer2FlowInfo,
-    layer3::{arp::*, ipv4::*, ipv6::*, Layer3, Layer3FlowInfo},
+    layer3::{self, arp::*, ipv4::*, ipv6::*, Layer3, Layer3FlowInfo},
 };
 
 use arrayref::array_ref;
@@ -13,6 +12,37 @@ use std::{self, convert::TryFrom};
 
 const ETHERNET_PAYLOAD: u16 = 1500u16;
 const VLAN_LENGTH: usize = 2;
+
+pub mod errors {
+    use crate::layer3;
+    use crate::nom_error;
+    use failure::{err_msg, Fail};
+
+    #[derive(Debug, Fail)]
+    pub enum Error {
+        #[fail(display = "Nom error while parsing Ethernet")]
+        Nom(#[fail(cause)] nom_error::Error),
+        #[fail(display = "Layer3 while parsing Ethernet")]
+        L3(#[fail(cause)] layer3::errors::Error),
+        #[fail(display = "Incomplete parse: {}", size)]
+        Incomplete {
+            size: usize
+        },
+        #[fail(display = "Unknown Ethernet Type: {:?}", etype)]
+        EthernetType {
+            etype: super::EthernetTypeId
+        },
+    }
+
+    impl From<layer3::errors::Error> for Error {
+        fn from(v: layer3::errors::Error) -> Self {
+            Error::L3(v)
+        }
+    }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
+}
 
 ///
 /// List of valid ethernet types that aren't payload or vlan. https://en.wikipedia.org/wiki/EtherType
@@ -217,59 +247,64 @@ impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
         let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
             match l3_id {
                 Layer3Id::IPv4 => IPv4::parse(&value.payload)
-                    .map_err(|e| {
+                    .map_err(|ref e| {
+                        #[cfg(feature = "log-errors")]
                         error!("Error parsing ipv4 {:?}", e);
-                        let err: Self::Error = e.into();
-                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                        let l3_error = crate::layer3::ipv4::errors::Error::Nom(e.into());
+                        errors::Error::L3(l3_error.into())
                     })
                     .and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3)
+                            Layer3FlowInfo::try_from(l3).map_err(|e| errors::Error::L3(e.into()))
                         } else {
-                            Err(errors::Error::from_kind(
-                                errors::ErrorKind::L2IncompleteParse(rem.len()),
-                            ))
+                            Err(errors::Error::Incomplete {
+                                size: rem.len()
+                            })
                         }
                     }),
                 Layer3Id::IPv6 => IPv6::parse(&value.payload)
-                    .map_err(|e| {
-                        let err: Self::Error = e.into();
-                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                    .map_err(|ref e| {
+                        #[cfg(feature = "log-errors")]
+                        error!("Error parsing ipv6 {:?}", e);
+                        let l3_error = crate::layer3::ipv6::errors::Error::Nom(e.into());
+                        errors::Error::L3(l3_error.into())
                     })
                     .and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3)
+                            Layer3FlowInfo::try_from(l3).map_err(|e| errors::Error::L3(e.into()))
                         } else {
-                            Err(errors::Error::from_kind(
-                                errors::ErrorKind::L2IncompleteParse(rem.len()),
-                            ))
+                            Err(errors::Error::Incomplete {
+                                size: rem.len()
+                            })
                         }
                     }),
                 Layer3Id::Arp => Arp::parse(&value.payload)
-                    .map_err(|e| {
-                        let err: Self::Error = e.into();
-                        err.chain_err(|| errors::Error::from_kind(errors::ErrorKind::FlowParse))
+                    .map_err(|ref e| {
+                        #[cfg(feature = "log-errors")]
+                        error!("Error parsing arp {:?}", e);
+                        let l3_error = crate::layer3::arp::errors::Error::Nom(e.into());
+                        errors::Error::L3(l3_error.into())
                     })
                     .and_then(|r| {
                         let (rem, l3) = r;
                         if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3)
+                            Layer3FlowInfo::try_from(l3).map_err(|e| errors::Error::L3(e.into()))
                         } else {
-                            Err(errors::Error::from_kind(
-                                errors::ErrorKind::L2IncompleteParse(rem.len()),
-                            ))
+                            Err(errors::Error::Incomplete {
+                                size: rem.len()
+                            })
                         }
                     }),
-                _ => Err(errors::Error::from_kind(errors::ErrorKind::EthernetType(
-                    ether_type,
-                ))),
+                _ => Err(errors::Error::EthernetType {
+                    etype: ether_type
+                }),
             }
         } else {
-            Err(errors::Error::from_kind(errors::ErrorKind::EthernetType(
-                ether_type,
-            )))
+            Err(errors::Error::EthernetType {
+                etype: ether_type
+            })
         }?;
 
         Ok(Layer2FlowInfo {

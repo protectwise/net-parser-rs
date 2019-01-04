@@ -1,5 +1,4 @@
 use crate::{
-    errors::{self, Error, ErrorKind},
     layer4::Layer4FlowInfo,
 };
 
@@ -9,6 +8,20 @@ use std;
 use std::convert::TryFrom;
 
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
+
+pub mod errors {
+    use crate::nom_error;
+    use failure::Fail;
+
+    #[derive(Debug, Fail)]
+    pub enum Error {
+        #[fail(display = "Nom error while parsing UDP")]
+        Nom(#[fail(cause)] nom_error::Error),
+    }
+
+    unsafe impl Sync for Error {}
+    unsafe impl Send for Error {}
+}
 
 pub struct Udp<'a> {
     dst_port: u16,
