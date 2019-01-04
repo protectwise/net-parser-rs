@@ -1,5 +1,5 @@
 use crate::{
-    record::{
+    parse::record::{
         PcapRecord
     },
     layer4::udp::Udp,

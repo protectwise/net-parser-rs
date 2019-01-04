@@ -1,5 +1,5 @@
 use crate::{
-    flow,
+    extraction::flow,
     layer4::Layer4FlowInfo,
 };
 

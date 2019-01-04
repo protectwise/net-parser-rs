@@ -1,13 +1,14 @@
 use crate::{
     errors::Error,
-    flow::{Flow, FlowExtraction},
+    extraction::flow::{Flow, FlowExtraction},
 };
 
-use futures::{self, try_ready, Async, Poll, Stream};
+use futures::{self, Poll, stream::Stream};
 use log::*;
 use std::{
     self,
     convert::{From, TryInto},
+    pin::Pin
 };
 
 pub struct FlowRecord<R>
@@ -18,7 +19,7 @@ where
     flow: Flow,
 }
 
-pub struct FlowStream<S>
+pub struct ExtractionStream<S>
 where
     S: Stream,
     S::Item: FlowExtraction,
@@ -26,48 +27,50 @@ where
     inner: S,
 }
 
-impl<S> FlowStream<S>
+impl<S> ExtractionStream<S>
 where
     S: Stream,
     S::Item: FlowExtraction,
 {
-    pub fn new(inner: S) -> FlowStream<S> {
-        FlowStream { inner: inner }
+    pub fn new(inner: S) -> ExtractionStream<S> {
+        ExtractionStream { inner: inner }
     }
 }
 
-impl<S> Stream for FlowStream<S>
+impl<S> Stream for ExtractionStream<S>
 where
-    S: Stream,
+    S: Stream + Unpin,
     S::Item: FlowExtraction,
 {
     type Item = FlowRecord<S::Item>;
-    type Error = S::Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(mut self: std::pin::Pin<&mut Self>, lw: &std::task::LocalWaker) -> futures::Poll<Option<Self::Item>> {
+        let this = &mut *self;
         loop {
-            if let Some(mut v) = try_ready!(self.inner.poll()) {
-                match v.extract_flow() {
-                    Err(e) => debug!("Failed to convert value: {:?}", e),
-                    Ok(f) => {
-                        let res = FlowRecord { record: v, flow: f };
-                        return Ok(Async::Ready(Some(res)));
+            match Pin::new(&mut this.inner).poll_next(lw) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Ready(Some(mut v)) => {
+                    match v.extract_flow() {
+                        Err(e) => debug!("Failed to convert value: {:?}", e),
+                        Ok(f) => {
+                            let res = FlowRecord { record: v, flow: f };
+                            return Poll::Ready(Some(res));
+                        }
                     }
                 }
-            } else {
-                return Ok(Async::Ready(None));
             }
         }
     }
 }
 
 pub trait WithExtraction: Stream {
-    fn extract<'a>(self) -> FlowStream<Self>
+    fn extract(self) -> ExtractionStream<Self>
     where
         Self: Stream + Sized,
         Self::Item: FlowExtraction,
     {
-        FlowStream::new(self)
+        ExtractionStream::new(self)
     }
 }
 
@@ -79,10 +82,10 @@ mod tests {
 
     use super::*;
 
-    use crate::{record::PcapRecord, CaptureParser};
+    use crate::{parse::record::PcapRecord, CaptureParser};
 
     use self::test::Bencher;
-    use futures::{stream as futures_stream, Future};
+    use futures::{stream as futures_stream, Future, StreamExt};
     use nom::Endianness;
     use std::{io::Read, path::PathBuf};
 
@@ -108,11 +111,14 @@ mod tests {
         assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
 
-        let fut_flows = futures_stream::iter_ok::<Vec<PcapRecord>, Error>(records)
-            .extract()
-            .collect();
+        let fut_flows = async {
+            let flows: Vec<_> = await!(futures_stream::iter(records)
+                .extract()
+                .collect());
+            flows
+        };
 
-        let flows = fut_flows.wait().expect("Failed to run");
+        let flows = futures::executor::block_on(fut_flows);
 
         assert_eq!(flows.len(), 236527);
     }
@@ -140,11 +146,14 @@ mod tests {
             assert_eq!(header.endianness(), Endianness::Little);
             assert_eq!(records.len(), 246137);
 
-            let fut_flows = futures_stream::iter_ok::<Vec<PcapRecord>, Error>(records)
-                .extract()
-                .collect();
+            let fut_flows = async {
+                let flows: Vec<_> = await!(futures_stream::iter(records)
+                    .extract()
+                    .collect());
+                flows
+            };
 
-            let flows = fut_flows.wait().expect("Failed to run");
+            let flows = futures::executor::block_on(fut_flows);
 
             assert_eq!(flows.len(), 236527);
         });

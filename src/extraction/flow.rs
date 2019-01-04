@@ -4,7 +4,7 @@ use crate::{
     common::{MacAddress, Vlan, MAC_LENGTH},
     errors::Error,
     layer2::{ethernet::Ethernet, Layer2FlowInfo},
-    record::PcapRecord,
+    parse::record::PcapRecord,
 };
 
 use std::{self, convert::TryFrom};
@@ -134,7 +134,7 @@ impl std::fmt::Display for Flow {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{layer2, layer3, layer4};
+    use crate::{layer2, layer3, layer4};
     use super::*;
 
     #[test]
