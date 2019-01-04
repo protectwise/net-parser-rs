@@ -1,5 +1,5 @@
 use crate::{
-    flow::{Device, Flow, FlowExtraction},
+    extraction::flow::{Device, Flow, FlowExtraction},
     layer2::{ethernet::Ethernet, Layer2, Layer2FlowInfo},
 };
 
@@ -11,27 +11,15 @@ use std::{self, convert::TryFrom};
 ///
 /// Pcap record associated with a libpcap capture
 ///
-pub struct PcapRecord<'a> {
+pub struct PcapRecord {
     timestamp: std::time::SystemTime,
     actual_length: u32,
     original_length: u32,
-    payload: &'a [u8],
+    payload: Vec<u8>,
     flow: Option<Flow>,
 }
 
-impl<'a> Default for PcapRecord<'a> {
-    fn default() -> Self {
-        PcapRecord {
-            timestamp: std::time::SystemTime::UNIX_EPOCH,
-            actual_length: 0,
-            original_length: 0,
-            payload: &[0u8; 0],
-            flow: None,
-        }
-    }
-}
-
-impl<'a> PcapRecord<'a> {
+impl PcapRecord {
     pub fn timestamp(&self) -> &std::time::SystemTime {
         &self.timestamp
     }
@@ -42,7 +30,7 @@ impl<'a> PcapRecord<'a> {
         self.original_length
     }
     pub fn payload(&self) -> &[u8] {
-        &self.payload
+        self.payload.as_ref()
     }
 
     ///
@@ -57,9 +45,9 @@ impl<'a> PcapRecord<'a> {
     ///
     /// Utility function to convert a vector of records to flows, unless an error is encountered in stream conversion
     ///
-    pub fn convert_records<'b>(
-        records: std::vec::Vec<PcapRecord<'b>>,
-    ) -> std::vec::Vec<PcapRecord<'b>> {
+    pub fn convert_records(
+        records: std::vec::Vec<PcapRecord>,
+    ) -> std::vec::Vec<PcapRecord> {
         let mut records = records;
         let mut results = vec![];
 
@@ -82,25 +70,25 @@ impl<'a> PcapRecord<'a> {
         results
     }
 
-    pub fn new(
+    pub fn new<T: Into<Vec<u8>>>(
         timestamp: std::time::SystemTime,
         actual_length: u32,
         original_length: u32,
-        payload: &'a [u8],
-    ) -> PcapRecord<'a> {
+        payload: T,
+    ) -> PcapRecord {
         PcapRecord {
             timestamp: timestamp,
             actual_length: actual_length,
             original_length: original_length,
-            payload: payload,
+            payload: payload.into(),
             flow: None,
         }
     }
 
-    pub fn parse<'b>(
-        input: &'b [u8],
+    pub fn parse(
+        input: &[u8],
         endianness: nom::Endianness,
-    ) -> nom::IResult<&'b [u8], PcapRecord<'b>> {
+    ) -> nom::IResult<&[u8], PcapRecord> {
         do_parse!(
             input,
             ts_seconds: u32!(endianness)
@@ -112,20 +100,20 @@ impl<'a> PcapRecord<'a> {
                     timestamp: PcapRecord::convert_packet_time(ts_seconds, ts_microseconds),
                     actual_length: actual_length,
                     original_length: original_length,
-                    payload: payload,
+                    payload: payload.into(),
                     flow: None
                 })
         )
     }
 }
 
-impl<'a> FlowExtraction for PcapRecord<'a> {
+impl FlowExtraction for PcapRecord {
     fn payload(&self) -> &[u8] {
-        self.payload
+        self.payload.as_ref()
     }
 }
 
-impl<'a> std::fmt::Display for PcapRecord<'a> {
+impl std::fmt::Display for PcapRecord {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.timestamp
             .duration_since(std::time::UNIX_EPOCH)

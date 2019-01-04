@@ -1,5 +1,5 @@
 #![allow(unused)]
-#![feature(test, try_from)]
+#![feature(test, try_from, futures_api, async_await, await_macro)]
 ///! net-parser-rs
 ///!
 ///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
@@ -8,17 +8,20 @@
 
 pub mod common;
 pub mod errors;
-pub mod flow;
-pub mod global_header;
+pub mod extraction;
 pub mod layer2;
 pub mod layer3;
 pub mod layer4;
 pub mod nom_error;
-pub mod record;
-pub mod stream;
+pub mod parse;
 
 use log::*;
 use nom::*;
+
+use crate::parse::{
+    global_header::GlobalHeader,
+    record::PcapRecord
+};
 
 ///
 /// Primary utility for parsing packet captures, either from file, bytes, or interfaces.
@@ -26,7 +29,7 @@ use nom::*;
 /// ```text
 ///    #![feature(try_from)]
 ///
-///    use net_parser_rs::NetworkParser;
+///    use net_parser_rs::CaptureParser;
 ///    use std::*;
 ///
 ///    //Parse a file with global header and packet records
@@ -42,7 +45,7 @@ use nom::*;
 ///    //Convert a packet into stream information
 ///    use net_parser_rs::convert::*;
 ///
-///    let stream = Flow::try_from(packet).expect("Could not convert packet");
+///    let stream = netparser_rs::extraction::Flow::try_from(packet).expect("Could not convert packet");
 ///```
 ///
 pub struct CaptureParser;
@@ -51,16 +54,16 @@ impl CaptureParser {
     ///
     /// Parse a slice of bytes that start with libpcap file format header (https://wiki.wireshark.org/Development/LibpcapFileFormat)
     ///
-    pub fn parse_file<'a>(
-        input: &'a [u8],
+    pub fn parse_file(
+        input: &[u8],
     ) -> IResult<
-        &'a [u8],
+        &[u8],
         (
-            global_header::GlobalHeader,
-            std::vec::Vec<record::PcapRecord<'a>>,
+            GlobalHeader,
+            std::vec::Vec<PcapRecord>,
         ),
     > {
-        let header_res = global_header::GlobalHeader::parse(input);
+        let header_res = GlobalHeader::parse(input);
 
         header_res.and_then(|r| {
             let (rem, header) = r;
@@ -87,17 +90,17 @@ impl CaptureParser {
     /// header (https://wiki.wireshark.org/Development/LibpcapFileFormat). Endianness of the byte
     /// slice must be known.
     ///
-    pub fn parse_records<'a>(
-        input: &'a [u8],
+    pub fn parse_records(
+        input: &[u8],
         endianness: Endianness,
-    ) -> IResult<&'a [u8], std::vec::Vec<record::PcapRecord<'a>>> {
-        let mut records: std::vec::Vec<record::PcapRecord> = vec![];
+    ) -> IResult<&[u8], std::vec::Vec<PcapRecord>> {
+        let mut records: std::vec::Vec<_> = vec![];
         let mut current = input;
 
         trace!("{} bytes left for record parsing", current.len());
 
         loop {
-            match record::PcapRecord::parse(current, endianness) {
+            match PcapRecord::parse(current, endianness) {
                 Ok((rem, r)) => {
                     current = rem;
                     trace!("{} bytes left for record parsing", current.len());
@@ -124,11 +127,11 @@ impl CaptureParser {
     ///
     /// Parse a slice of bytes as a single record. Endianness must be known.
     ///
-    pub fn parse_record<'a>(
-        input: &'a [u8],
+    pub fn parse_record(
+        input: &[u8],
         endianness: Endianness,
-    ) -> IResult<&'a [u8], record::PcapRecord<'a>> {
-        record::PcapRecord::parse(input, endianness)
+    ) -> IResult<&[u8], PcapRecord> {
+        PcapRecord::parse(input, endianness)
     }
 }
 
@@ -137,7 +140,7 @@ pub mod tests {
     extern crate test;
 
     use self::test::Bencher;
-    use crate::{flow::FlowExtraction, record::PcapRecord, CaptureParser};
+    use crate::{extraction::flow::FlowExtraction, parse::record::PcapRecord, CaptureParser};
     use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
