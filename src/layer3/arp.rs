@@ -1,8 +1,5 @@
-use crate::{
-    common::{MacAddress, MAC_LENGTH},
-    layer3::Layer3FlowInfo,
-    layer4::{tcp::*, udp::*, Layer4, Layer4FlowInfo},
-};
+use crate::common::{MacAddress, MAC_LENGTH};
+use crate::layer4::{tcp::*, udp::*, Layer4};
 
 use arrayref::array_ref;
 use log::*;
@@ -10,28 +7,12 @@ use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 
 use std::{self, convert::TryFrom};
 
-pub mod errors {
-    use crate::nom_error;
-    use failure::Fail;
-
-    #[derive(Debug, Fail)]
-    pub enum Error {
-        #[fail(display = "Nom error while parsing ARP")]
-        Nom(#[fail(cause)] nom_error::Error),
-        #[fail(display = "ARP cannot be converted to a flow")]
-        Flow,
-    }
-
-    unsafe impl Sync for Error {}
-    unsafe impl Send for Error {}
-}
-
 pub struct Arp {
-    sender_ip: std::net::IpAddr,
-    sender_mac: MacAddress,
-    target_ip: std::net::IpAddr,
-    target_mac: MacAddress,
-    operation: u16,
+    pub sender_ip: std::net::IpAddr,
+    pub sender_mac: MacAddress,
+    pub target_ip: std::net::IpAddr,
+    pub target_mac: MacAddress,
+    pub operation: u16,
 }
 
 const ADDRESS_LENGTH: usize = 4;
@@ -56,22 +37,6 @@ named!(
 );
 
 impl Arp {
-    pub fn sender_ip(&self) -> &std::net::IpAddr {
-        &self.sender_ip
-    }
-    pub fn sender_mac(&self) -> &MacAddress {
-        &self.sender_mac
-    }
-    pub fn target_ip(&self) -> &std::net::IpAddr {
-        &self.target_ip
-    }
-    pub fn target_mac(&self) -> &MacAddress {
-        &self.target_mac
-    }
-    pub fn operation(&self) -> &u16 {
-        &self.operation
-    }
-
     pub fn new(
         sender_ip: std::net::Ipv4Addr,
         sender_mac: [u8; MAC_LENGTH],
@@ -113,14 +78,6 @@ impl Arp {
     }
 }
 
-impl TryFrom<Arp> for Layer3FlowInfo {
-    type Error = errors::Error;
-
-    fn try_from(value: Arp) -> Result<Self, Self::Error> {
-        Err(errors::Error::Flow)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,25 +101,25 @@ mod tests {
 
         assert!(rem.is_empty());
         assert_eq!(
-            *l3.sender_ip(),
+            l3.sender_ip,
             "192.168.89.1"
                 .parse::<std::net::IpAddr>()
                 .expect("Could not parse ip address")
         );
         assert_eq!(
-            format!("{}", *l3.sender_mac()),
+            format!("{}", l3.sender_mac),
             "00:0a:dc:64:85:c2".to_string()
         );
         assert_eq!(
-            *l3.target_ip(),
+            l3.target_ip,
             "192.168.89.2"
                 .parse::<std::net::IpAddr>()
                 .expect("Could not parse ip address")
         );
         assert_eq!(
-            format!("{}", *l3.target_mac()),
+            format!("{}", l3.target_mac),
             "00:00:00:00:00:00".to_string()
         );
-        assert_eq!(*l3.operation(), 1u16);
+        assert_eq!(l3.operation, 1u16);
     }
 }

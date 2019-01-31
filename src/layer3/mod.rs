@@ -1,7 +1,10 @@
 pub mod arp;
 pub mod ipv4;
 pub mod ipv6;
-pub mod lldp;
+
+pub use arp::Arp as Arp;
+pub use ipv4::IPv4 as IPv4;
+pub use ipv6::IPv6 as IPv6;
 
 use log::*;
 use std;
@@ -10,25 +13,16 @@ use std;
 /// Available layer 3 representations
 ///
 pub enum Layer3<'a> {
-    Arp(arp::Arp),
-    IPv4(ipv4::IPv4<'a>),
-    IPv6(ipv6::IPv6<'a>),
+    Arp(Arp),
+    IPv4(IPv4<'a>),
+    IPv6(IPv6<'a>),
     //Lldp(lldp::Lldp)
-}
-
-///
-/// Information from Layer 3 protocols used in stream determination
-///
-pub struct Layer3FlowInfo {
-    pub dst_ip: std::net::IpAddr,
-    pub src_ip: std::net::IpAddr,
-    pub layer4: crate::layer4::Layer4FlowInfo,
 }
 
 ///
 /// IP Protocol numbers https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 ///
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InternetProtocolId {
     AuthenticationHeader,
     HopByHop,
@@ -74,42 +68,4 @@ impl InternetProtocolId {
             _ => false,
         }
     }
-}
-
-pub mod errors {
-    use crate::layer3::arp;
-    use crate::layer3::ipv4;
-    use crate::layer3::ipv6;
-    use failure::Fail;
-
-    #[derive(Debug, Fail)]
-    pub enum Error {
-        #[fail(display = "ARP Error")]
-        Arp(#[fail(cause)] arp::errors::Error),
-        #[fail(display = "IPv4 Error")]
-        IPv4(#[fail(cause)] ipv4::errors::Error),
-        #[fail(display = "IPv6 Error")]
-        IPv6(#[fail(cause)] ipv6::errors::Error)
-    }
-
-    impl From<arp::errors::Error> for Error {
-        fn from(v: arp::errors::Error) -> Self {
-            Error::Arp(v)
-        }
-    }
-
-    impl From<ipv4::errors::Error> for Error {
-        fn from(v: ipv4::errors::Error) -> Self {
-            Error::IPv4(v)
-        }
-    }
-
-    impl From<ipv6::errors::Error> for Error {
-        fn from(v: ipv6::errors::Error) -> Self {
-            Error::IPv6(v)
-        }
-    }
-
-    unsafe impl Sync for Error {}
-    unsafe impl Send for Error {}
 }

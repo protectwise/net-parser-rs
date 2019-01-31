@@ -1,8 +1,5 @@
-use crate::{
-    common::{MacAddress, Vlan, MAC_LENGTH},
-    layer2::Layer2FlowInfo,
-    layer3::{self, arp::*, ipv4::*, ipv6::*, Layer3, Layer3FlowInfo},
-};
+use crate::common::{MacAddress, Vlan, MAC_LENGTH};
+use crate::layer3::{self, arp::*, ipv4::*, ipv6::*, Layer3};
 
 use arrayref::array_ref;
 use log::*;
@@ -12,37 +9,6 @@ use std::{self, convert::TryFrom};
 
 const ETHERNET_PAYLOAD: u16 = 1500u16;
 const VLAN_LENGTH: usize = 2;
-
-pub mod errors {
-    use crate::layer3;
-    use crate::nom_error;
-    use failure::{err_msg, Fail};
-
-    #[derive(Debug, Fail)]
-    pub enum Error {
-        #[fail(display = "Nom error while parsing Ethernet")]
-        Nom(#[fail(cause)] nom_error::Error),
-        #[fail(display = "Layer3 while parsing Ethernet")]
-        L3(#[fail(cause)] layer3::errors::Error),
-        #[fail(display = "Incomplete parse: {}", size)]
-        Incomplete {
-            size: usize
-        },
-        #[fail(display = "Unknown Ethernet Type: {:?}", etype)]
-        EthernetType {
-            etype: super::EthernetTypeId
-        },
-    }
-
-    impl From<layer3::errors::Error> for Error {
-        fn from(v: layer3::errors::Error) -> Self {
-            Error::L3(v)
-        }
-    }
-
-    unsafe impl Sync for Error {}
-    unsafe impl Send for Error {}
-}
 
 ///
 /// List of valid ethernet types that aren't payload or vlan. https://en.wikipedia.org/wiki/EtherType
@@ -101,11 +67,11 @@ impl VlanTag {
 }
 
 pub struct Ethernet<'a> {
-    dst_mac: MacAddress,
-    src_mac: MacAddress,
-    ether_type: EthernetTypeId,
-    vlans: std::vec::Vec<VlanTag>,
-    payload: &'a [u8],
+    pub dst_mac: MacAddress,
+    pub src_mac: MacAddress,
+    pub ether_type: EthernetTypeId,
+    pub vlans: std::vec::Vec<VlanTag>,
+    pub payload: &'a [u8],
 }
 
 fn to_mac_address(i: &[u8]) -> MacAddress {
@@ -115,22 +81,6 @@ fn to_mac_address(i: &[u8]) -> MacAddress {
 named!(mac_address<&[u8], MacAddress>, map!(take!(MAC_LENGTH), to_mac_address));
 
 impl<'a> Ethernet<'a> {
-    pub fn dst_mac(&self) -> &MacAddress {
-        &self.dst_mac
-    }
-
-    pub fn src_mac(&self) -> &MacAddress {
-        &self.src_mac
-    }
-
-    pub fn ether_type(&self) -> &EthernetTypeId {
-        &self.ether_type
-    }
-
-    pub fn vlans(&self) -> &std::vec::Vec<VlanTag> {
-        &self.vlans
-    }
-
     pub fn vlans_to_vlan(vlans: &std::vec::Vec<VlanTag>) -> Vlan {
         let opt_vlan = vlans.first().map(|v| v.vlan());
         opt_vlan.unwrap_or(0)
@@ -138,10 +88,6 @@ impl<'a> Ethernet<'a> {
 
     pub fn vlan(&self) -> Vlan {
         Ethernet::vlans_to_vlan(&self.vlans)
-    }
-
-    pub fn payload(&self) -> &'a [u8] {
-        self.payload
     }
 
     fn parse_not_vlan_tag<'b>(
@@ -234,97 +180,15 @@ impl<'a> Ethernet<'a> {
     }
 }
 
-impl<'a> TryFrom<Ethernet<'a>> for Layer2FlowInfo {
-    type Error = errors::Error;
-
-    fn try_from(value: Ethernet) -> Result<Self, Self::Error> {
-        let ether_type = value.ether_type;
-        debug!(
-            "Creating from layer 3 type {:?} using payload of {}B",
-            ether_type,
-            value.payload.len()
-        );
-        let l3 = if let EthernetTypeId::L3(l3_id) = ether_type.clone() {
-            match l3_id {
-                Layer3Id::IPv4 => IPv4::parse(&value.payload)
-                    .map_err(|ref e| {
-                        #[cfg(feature = "log-errors")]
-                        error!("Error parsing ipv4 {:?}", e);
-                        let l3_error = crate::layer3::ipv4::errors::Error::Nom(e.into());
-                        errors::Error::L3(l3_error.into())
-                    })
-                    .and_then(|r| {
-                        let (rem, l3) = r;
-                        if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3).map_err(|e| errors::Error::L3(e.into()))
-                        } else {
-                            Err(errors::Error::Incomplete {
-                                size: rem.len()
-                            })
-                        }
-                    }),
-                Layer3Id::IPv6 => IPv6::parse(&value.payload)
-                    .map_err(|ref e| {
-                        #[cfg(feature = "log-errors")]
-                        error!("Error parsing ipv6 {:?}", e);
-                        let l3_error = crate::layer3::ipv6::errors::Error::Nom(e.into());
-                        errors::Error::L3(l3_error.into())
-                    })
-                    .and_then(|r| {
-                        let (rem, l3) = r;
-                        if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3).map_err(|e| errors::Error::L3(e.into()))
-                        } else {
-                            Err(errors::Error::Incomplete {
-                                size: rem.len()
-                            })
-                        }
-                    }),
-                Layer3Id::Arp => Arp::parse(&value.payload)
-                    .map_err(|ref e| {
-                        #[cfg(feature = "log-errors")]
-                        error!("Error parsing arp {:?}", e);
-                        let l3_error = crate::layer3::arp::errors::Error::Nom(e.into());
-                        errors::Error::L3(l3_error.into())
-                    })
-                    .and_then(|r| {
-                        let (rem, l3) = r;
-                        if rem.is_empty() {
-                            Layer3FlowInfo::try_from(l3).map_err(|e| errors::Error::L3(e.into()))
-                        } else {
-                            Err(errors::Error::Incomplete {
-                                size: rem.len()
-                            })
-                        }
-                    }),
-                _ => Err(errors::Error::EthernetType {
-                    etype: ether_type
-                }),
-            }
-        } else {
-            Err(errors::Error::EthernetType {
-                etype: ether_type
-            })
-        }?;
-
-        Ok(Layer2FlowInfo {
-            src_mac: value.src_mac,
-            dst_mac: value.dst_mac,
-            vlan: Ethernet::vlans_to_vlan(&value.vlans),
-            layer3: l3,
-        })
-    }
-}
-
 #[cfg(test)]
-mod tests {
+pub mod tests {
     extern crate env_logger;
     extern crate hex_slice;
     use self::hex_slice::AsHex;
 
     use super::*;
 
-    const PAYLOAD_RAW_DATA: &'static [u8] = &[
+    pub const PAYLOAD_RAW_DATA: &'static [u8] = &[
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
         0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
         0x00u8, 0x04u8, //payload ethernet
@@ -332,7 +196,7 @@ mod tests {
         0x01u8, 0x02u8, 0x03u8, 0x04u8,
     ];
 
-    const TCP_RAW_DATA: &'static [u8] = &[
+    pub const TCP_RAW_DATA: &'static [u8] = &[
         0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, //dst mac 01:02:03:04:05:06
         0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8, //src mac FF:FE:FD:FC:FB:FA
         0x08u8, 0x00u8, //ipv4
@@ -372,16 +236,16 @@ mod tests {
 
         assert!(rem.is_empty());
         assert_eq!(
-            l2.dst_mac().0,
+            l2.dst_mac.0,
             [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]
         );
         assert_eq!(
-            l2.src_mac().0,
+            l2.src_mac.0,
             [0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8]
         );
-        assert!(l2.vlans().is_empty());
+        assert!(l2.vlans.is_empty());
 
-        let proto_correct = if let EthernetTypeId::PayloadLength(_) = l2.ether_type() {
+        let proto_correct = if let EthernetTypeId::PayloadLength(_) = l2.ether_type {
             true
         } else {
             false
@@ -398,36 +262,22 @@ mod tests {
 
         assert!(rem.is_empty());
         assert_eq!(
-            l2.dst_mac().0,
+            l2.dst_mac.0,
             [0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8]
         );
         assert_eq!(
-            l2.src_mac().0,
+            l2.src_mac.0,
             [0xFFu8, 0xFEu8, 0xFDu8, 0xFCu8, 0xFBu8, 0xFAu8]
         );
-        assert!(l2.vlans().is_empty());
+        assert!(l2.vlans.is_empty());
 
-        let proto_correct = if let EthernetTypeId::L3(Layer3Id::IPv4) = l2.ether_type() {
+        let proto_correct = if let EthernetTypeId::L3(Layer3Id::IPv4) = l2.ether_type {
             true
         } else {
             false
         };
 
         assert!(proto_correct);
-    }
-
-    #[test]
-    fn convert_ethernet_tcp() {
-        let _ = env_logger::try_init();
-
-        let (rem, l2) = Ethernet::parse(TCP_RAW_DATA).expect("Could not parse");
-
-        assert!(rem.is_empty());
-
-        let info = Layer2FlowInfo::try_from(l2).expect("Could not convert to layer 2 stream info");
-
-        assert_eq!(info.layer3.layer4.src_port, 50871);
-        assert_eq!(info.layer3.layer4.dst_port, 80);
     }
 
     #[test]

@@ -7,7 +7,6 @@
 ///!
 
 pub mod common;
-pub mod errors;
 pub mod flow;
 pub mod global_header;
 pub mod layer2;
@@ -40,7 +39,7 @@ use nom::*;
 ///    let packet = CaptureParser::parse_record(packet_bytes).expect("Could not parse");
 ///
 ///    //Convert a packet into stream information
-///    use net_parser_rs::convert::*;
+///    use net_parser_rs::flow::*;
 ///
 ///    let stream = Flow::try_from(packet).expect("Could not convert packet");
 ///```
@@ -136,7 +135,7 @@ impl CaptureParser {
 pub mod tests {
     extern crate test;
 
-    use self::test::Bencher;
+    use test::Bencher;
     use crate::{flow::FlowExtraction, record::PcapRecord, CaptureParser};
     use nom::Endianness;
     use std::io::prelude::*;
@@ -144,8 +143,6 @@ pub mod tests {
 
 
     pub mod util {
-        extern crate hex;
-        extern crate regex;
         use regex::Regex;
 
         #[test]
@@ -268,8 +265,8 @@ pub mod tests {
         let mut record = records.pop().unwrap();
         let flow = record.extract_flow().expect("Failed to extract flow");
 
-        assert_eq!(flow.source().port(), 50871);
-        assert_eq!(flow.destination().port(), 80);
+        assert_eq!(flow.source.port, 50871);
+        assert_eq!(flow.destination.port, 80);
     }
 
     #[test]
@@ -294,33 +291,6 @@ pub mod tests {
         assert_eq!(records.len(), 246137);
     }
 
-    #[test]
-    fn file_convert() {
-        let _ = env_logger::try_init();
-
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("4SICS-GeekLounge-151020.pcap");
-
-        let pcap_reader = std::fs::File::open(pcap_path.clone())
-            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
-
-        let bytes = pcap_reader
-            .bytes()
-            .map(|b| b.unwrap())
-            .collect::<std::vec::Vec<u8>>();
-
-        let (rem, (header, mut records)) =
-            CaptureParser::parse_file(&bytes).expect("Failed to parse");
-
-        assert_eq!(header.endianness(), Endianness::Little);
-        assert_eq!(records.len(), 246137);
-
-        let converted_records = PcapRecord::convert_records(records);
-
-        assert_eq!(converted_records.len(), 236527);
-    }
-
     #[bench]
     fn bench_parse(b: &mut Bencher) {
         let _ = env_logger::try_init();
@@ -343,35 +313,6 @@ pub mod tests {
 
             assert_eq!(header.endianness(), Endianness::Little);
             assert_eq!(records.len(), 246137);
-        });
-    }
-
-    #[bench]
-    fn bench_parse_convert(b: &mut Bencher) {
-        let _ = env_logger::try_init();
-
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("4SICS-GeekLounge-151020.pcap");
-
-        let pcap_reader = std::fs::File::open(pcap_path.clone())
-            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
-
-        let bytes = pcap_reader
-            .bytes()
-            .map(|b| b.unwrap())
-            .collect::<std::vec::Vec<u8>>();
-
-        b.iter(|| {
-            let (rem, (header, mut records)) =
-                CaptureParser::parse_file(&bytes).expect("Failed to parse");
-
-            assert_eq!(header.endianness(), Endianness::Little);
-            assert_eq!(records.len(), 246137);
-
-            let converted_records = PcapRecord::convert_records(records);
-
-            assert_eq!(converted_records.len(), 236527);
         });
     }
 }

@@ -11,43 +11,15 @@ use nom::{
     IResult
 };
 
-pub mod errors {
-    use crate::nom_error;
-    use failure::Fail;
-
-    #[derive(Debug, Fail)]
-    pub enum Error {
-        #[fail(display = "Nom error while parsing Vxlan")]
-        Nom(#[fail(cause)] nom_error::Error),
-    }
-
-    unsafe impl Sync for Error {}
-    unsafe impl Send for Error {}
-}
-
 #[derive(Debug)]
 pub struct Vxlan<'a> {
-    flags: u16,
-    group_policy_id: u16,
-    network_identifier: u32, // only can use 3 bytes
-    payload: &'a [u8],
+    pub flags: u16,
+    pub group_policy_id: u16,
+    pub network_identifier: u32, // only can use 3 bytes
+    pub payload: &'a [u8],
 }
 
 impl<'a> Vxlan<'a> {
-    pub fn flags(&self) -> u16 {
-        self.flags
-    }
-    pub fn group_policy_id(&self) -> u16 {
-        self.group_policy_id
-    }
-    /// Not lager than 2^24
-    pub fn network_identifier(&self) -> u32 {
-        self.network_identifier
-    }
-    pub fn payload(&self) -> &[u8] {
-        self.payload
-    }
-
     pub fn new(
         flags: u16,
         group_policy_id: u16,
@@ -119,24 +91,24 @@ mod tests {
         assert_eq!(bytes.len(), 148);
 
         let enet = Ethernet::parse(bytes.as_slice()).expect("Invalid ethernet").1;
-        assert_eq!(format!("{}", enet.dst_mac()), "08:00:27:f2:1d:8c");
+        assert_eq!(format!("{}", enet.dst_mac), "08:00:27:f2:1d:8c");
 
-        let ip: IPv4 = IPv4::parse(enet.payload()).expect("Invalid IPv4").1;
-        assert_eq!(format!("{}", ip.dst_ip()), "192.168.56.12");
+        let ip: IPv4 = IPv4::parse(enet.payload).expect("Invalid IPv4").1;
+        assert_eq!(format!("{}", ip.dst_ip), "192.168.56.12");
 
-        let udp: Udp = Udp::parse(ip.payload()).expect("Invalid udp").1;
-        assert_eq!(udp.dst_port(), 4789);
+        let udp: Udp = Udp::parse(ip.payload).expect("Invalid udp").1;
+        assert_eq!(udp.dst_port, 4789);
 
-        let (remainder, vxlan) = Vxlan::parse(&udp.payload(), nom::Endianness::Big).expect("Invalid VXLAN");
+        let (remainder, vxlan) = Vxlan::parse(&udp.payload, nom::Endianness::Big).expect("Invalid VXLAN");
         assert_eq!(remainder.len(), 0);
-        assert_eq!(vxlan.flags(), 0x0800);
-        assert_eq!(vxlan.network_identifier(), 123);
+        assert_eq!(vxlan.flags, 0x0800);
+        assert_eq!(vxlan.network_identifier, 123);
 
-        let enet2 = Ethernet::parse(vxlan.payload()).expect("Invalid inner Ethernet").1;
-        assert_eq!(format!("{}", enet2.dst_mac()), "4a:7f:01:3b:a2:71");
+        let enet2 = Ethernet::parse(vxlan.payload).expect("Invalid inner Ethernet").1;
+        assert_eq!(format!("{}", enet2.dst_mac), "4a:7f:01:3b:a2:71");
 
-        let ip2: IPv4 = IPv4::parse(enet2.payload()).expect("Invalid Inner IPv4").1;
-        assert_eq!(format!("{}", ip2.dst_ip()), "10.0.0.2");
+        let ip2: IPv4 = IPv4::parse(enet2.payload).expect("Invalid Inner IPv4").1;
+        assert_eq!(format!("{}", ip2.dst_ip), "10.0.0.2");
     }
 
     #[test]
@@ -155,15 +127,15 @@ mod tests {
         assert_eq!(bytes.len(), 44);
 
         let enet = Ethernet::parse(bytes.as_slice()).expect("Invalid ethernet").1;
-        assert_eq!(format!("{}", enet.dst_mac()), "00:86:9c:66:13:11");
+        assert_eq!(format!("{}", enet.dst_mac), "00:86:9c:66:13:11");
 
-        let ip: IPv4 = IPv4::parse(enet.payload()).expect("Invalid IPv4").1;
-        assert_eq!(format!("{}", ip.dst_ip()), "1.1.1.1");
+        let ip: IPv4 = IPv4::parse(enet.payload).expect("Invalid IPv4").1;
+        assert_eq!(format!("{}", ip.dst_ip), "1.1.1.1");
 
-        let udp: Udp = Udp::parse(ip.payload()).expect("Invalid udp").1;
-        assert_eq!(udp.dst_port(), 5300);
+        let udp: Udp = Udp::parse(ip.payload).expect("Invalid udp").1;
+        assert_eq!(udp.dst_port, 5300);
 
-        let vxlan = Vxlan::parse(&udp.payload(), nom::Endianness::Big);
+        let vxlan = Vxlan::parse(&udp.payload, nom::Endianness::Big);
         assert!(vxlan.is_err(), "Should not parse as VXLan")
 
     }

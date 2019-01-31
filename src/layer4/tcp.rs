@@ -1,8 +1,3 @@
-use crate::{
-    flow,
-    layer4::Layer4FlowInfo,
-};
-
 use log::*;
 use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 use std;
@@ -11,40 +6,16 @@ use std::convert::TryFrom;
 const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
 const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
 
-pub mod errors {
-    use crate::nom_error;
-    use failure::Fail;
-
-    #[derive(Debug, Fail)]
-    pub enum Error {
-        #[fail(display = "Nom error while parsing TCP")]
-        Nom(#[fail(cause)] nom_error::Error),
-    }
-
-    unsafe impl Sync for Error {}
-    unsafe impl Send for Error {}
-}
-
 pub struct Tcp<'a> {
-    dst_port: u16,
-    src_port: u16,
-    sequence_number: u32,
-    acknowledgement_number: u32,
-    flags: u16,
-    payload: &'a [u8],
+    pub dst_port: u16,
+    pub src_port: u16,
+    pub sequence_number: u32,
+    pub acknowledgement_number: u32,
+    pub flags: u16,
+    pub payload: &'a [u8],
 }
 
 impl<'a> Tcp<'a> {
-    pub fn dst_port(&self) -> u16 {
-        self.dst_port
-    }
-    pub fn src_port(&self) -> u16 {
-        self.src_port
-    }
-    pub fn payload(&self) -> &'a [u8] {
-        &self.payload
-    }
-
     pub fn extract_length(value: u16) -> usize {
         let words = value >> 12;
         (words * 4) as usize
@@ -104,26 +75,13 @@ impl<'a> Tcp<'a> {
     }
 }
 
-impl<'a> TryFrom<Tcp<'a>> for Layer4FlowInfo {
-    type Error = errors::Error;
-
-    fn try_from(value: Tcp<'a>) -> Result<Self, Self::Error> {
-        Ok(Layer4FlowInfo {
-            dst_port: value.dst_port,
-            src_port: value.src_port,
-        })
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    extern crate env_logger;
-    extern crate hex_slice;
-    use self::hex_slice::AsHex;
+pub mod tests {
+    use hex_slice::AsHex;
 
     use super::*;
 
-    const RAW_DATA: &'static [u8] = &[
+    pub const RAW_DATA: &'static [u8] = &[
         0xC6u8, 0xB7u8, //src port, 50871
         0x00u8, 0x50u8, //dst port, 80
         0x00u8, 0x00u8, 0x00u8, 0x01u8, //sequence number, 1
@@ -154,10 +112,10 @@ mod tests {
 
         assert!(rem.is_empty());
 
-        assert_eq!(l4.dst_port(), 80);
-        assert_eq!(l4.src_port(), 50871);
+        assert_eq!(l4.dst_port, 80);
+        assert_eq!(l4.src_port, 50871);
         assert_eq!(
-            l4.payload(),
+            l4.payload,
             [
                 0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
                 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
@@ -165,21 +123,7 @@ mod tests {
                 0xfeu8, 0xffu8
             ],
             "Payload Mismatch: {:x}",
-            l4.payload().as_hex()
+            l4.payload.as_hex()
         );
-    }
-
-    #[test]
-    fn convert_tcp() {
-        let _ = env_logger::try_init();
-
-        let (rem, l4) = Tcp::parse(RAW_DATA).expect("Unable to parse");
-
-        assert!(rem.is_empty());
-
-        let info = Layer4FlowInfo::try_from(l4).expect("Could not convert to layer 4 info");
-
-        assert_eq!(info.src_port, 50871);
-        assert_eq!(info.dst_port, 80);
     }
 }

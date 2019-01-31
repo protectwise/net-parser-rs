@@ -13,20 +13,20 @@ categories=["encoding","network-programming","parsing"]
 [features]
 default = []
 
-# Log extraction errors
+# Log flow errors
 log-errors = []
 
 [dependencies]
-arrayref = "~0.3"
-nom = "~4.1"
-failure = "~0.1"
-failure_derive = "~0.1"
-futures = "~0.1"
-log = "~0.4"
+arrayref = "0.3"
+nom = "4.1"
+failure = "0.1"
+failure_derive = "0.1"
+futures = "0.1"
+log = "0.4"
 
 [dev-dependencies]
-env_logger = "0.6.0"
-hex-slice = "~0.1"
-tokio = "~0.1"
-regex = "~1"
-hex = "~0.3.2"
+env_logger = "0.6"
+hex-slice = "0.1"
+tokio = "0.1"
+regex = "1"
+hex = "0.3"

@@ -1,7 +1,4 @@
-use crate::{
-    flow::{Device, Flow, FlowExtraction},
-    layer2::{ethernet::Ethernet, Layer2, Layer2FlowInfo},
-};
+use crate::layer2::{ethernet::Ethernet, Layer2};
 
 use log::*;
 use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
@@ -12,11 +9,10 @@ use std::{self, convert::TryFrom};
 /// Pcap record associated with a libpcap capture
 ///
 pub struct PcapRecord<'a> {
-    timestamp: std::time::SystemTime,
-    actual_length: u32,
-    original_length: u32,
-    payload: &'a [u8],
-    flow: Option<Flow>,
+    pub timestamp: std::time::SystemTime,
+    pub actual_length: u32,
+    pub original_length: u32,
+    pub payload: &'a [u8],
 }
 
 impl<'a> Default for PcapRecord<'a> {
@@ -26,25 +22,11 @@ impl<'a> Default for PcapRecord<'a> {
             actual_length: 0,
             original_length: 0,
             payload: &[0u8; 0],
-            flow: None,
         }
     }
 }
 
 impl<'a> PcapRecord<'a> {
-    pub fn timestamp(&self) -> &std::time::SystemTime {
-        &self.timestamp
-    }
-    pub fn actual_length(&self) -> u32 {
-        self.actual_length
-    }
-    pub fn original_length(&self) -> u32 {
-        self.original_length
-    }
-    pub fn payload(&self) -> &[u8] {
-        &self.payload
-    }
-
     ///
     /// Convert a packet time (seconds and partial second microseconds) to a system time (offset from epoch)
     ///
@@ -52,34 +34,6 @@ impl<'a> PcapRecord<'a> {
         let offset = std::time::Duration::from_secs(ts_seconds as u64)
             + std::time::Duration::from_micros(ts_microseconds as u64);
         std::time::UNIX_EPOCH + offset
-    }
-
-    ///
-    /// Utility function to convert a vector of records to flows, unless an error is encountered in stream conversion
-    ///
-    pub fn convert_records<'b>(
-        records: std::vec::Vec<PcapRecord<'b>>,
-    ) -> std::vec::Vec<PcapRecord<'b>> {
-        let mut records = records;
-        let mut results = vec![];
-
-        loop {
-            if let Some(mut r) = records.pop() {
-                match r.extract_flow() {
-                    Ok(f) => {
-                        r.flow = Some(f);
-                        results.push(r);
-                    }
-                    Err(e) => {
-                        debug!("Failed to extract stream: {}", e);
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-
-        results
     }
 
     pub fn new(
@@ -93,7 +47,6 @@ impl<'a> PcapRecord<'a> {
             actual_length: actual_length,
             original_length: original_length,
             payload: payload,
-            flow: None,
         }
     }
 
@@ -112,16 +65,9 @@ impl<'a> PcapRecord<'a> {
                     timestamp: PcapRecord::convert_packet_time(ts_seconds, ts_microseconds),
                     actual_length: actual_length,
                     original_length: original_length,
-                    payload: payload,
-                    flow: None
+                    payload: payload
                 })
         )
-    }
-}
-
-impl<'a> FlowExtraction for PcapRecord<'a> {
-    fn payload(&self) -> &[u8] {
-        self.payload
     }
 }
 
@@ -139,13 +85,6 @@ impl<'a> std::fmt::Display for PcapRecord<'a> {
                     self.actual_length,
                     self.original_length
                 )
-                .and_then(|_| {
-                    if let Some(ref flw) = self.flow {
-                        write!(f, "   Flow=").and_then(|_| flw.fmt(f))
-                    } else {
-                        write!(f, "   Flow=None")
-                    }
-                })
             })
     }
 }
@@ -155,6 +94,8 @@ mod tests {
     extern crate env_logger;
 
     use super::*;
+
+    use crate::flow::FlowExtraction;
 
     const RAW_DATA: &'static [u8] = &[
         0x5Bu8, 0x11u8, 0x6Du8, 0xE3u8, //seconds, 1527868899
@@ -204,7 +145,7 @@ mod tests {
 
         assert_eq!(
             format!("{}", record),
-            "Timestamp=1527868899152   Length=86   Original Length=1232   Flow=None"
+            "Timestamp=1527868899152   Length=86   Original Length=1232"
         );
     }
 
@@ -230,9 +171,9 @@ mod tests {
 
         let offset =
             std::time::Duration::from_secs(1527868899) + std::time::Duration::from_micros(152053);
-        assert_eq!(*record.timestamp(), std::time::UNIX_EPOCH + offset);
-        assert_eq!(record.actual_length(), 86);
-        assert_eq!(record.original_length(), 1232);
+        assert_eq!(record.timestamp, std::time::UNIX_EPOCH + offset);
+        assert_eq!(record.actual_length, 86);
+        assert_eq!(record.original_length, 1232);
     }
 
     #[test]
@@ -245,7 +186,7 @@ mod tests {
         assert!(rem.is_empty());
 
         let flow = record.extract_flow().expect("Could not extract stream");
-        assert_eq!(flow.source().port(), 50871);
-        assert_eq!(flow.destination().port(), 80);
+        assert_eq!(flow.source.port, 50871);
+        assert_eq!(flow.destination.port, 80);
     }
 }
