@@ -1,7 +1,5 @@
-use crate::{
-    layer3::{InternetProtocolId, Layer3FlowInfo},
-    layer4::{tcp::*, udp::*, Layer4, Layer4FlowInfo}
-};
+use crate::layer3::InternetProtocolId;
+use crate::layer4::{tcp::*, udp::*, Layer4};
 
 use arrayref::array_ref;
 use log::*;
@@ -12,45 +10,13 @@ use std::{self, convert::TryFrom};
 const ADDRESS_LENGTH: usize = 4;
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
-pub mod errors {
-    use crate::layer3;
-    use crate::layer4;
-    use crate::nom_error;
-    use failure::Fail;
-
-    #[derive(Debug, Fail)]
-    pub enum Error {
-        #[fail(display = "Nom error while parsing IPv4")]
-        Nom(#[fail(cause)] nom_error::Error),
-        #[fail(display = "Layer4 error while parsing IPv4")]
-        L4(#[fail(cause)] layer4::errors::Error),
-        #[fail(display = "Incomplete parse while parsing IPv4: {}", size)]
-        Incomplete {
-            size: usize
-        },
-        #[fail(display = "Unknown type while parsing IPv4: {:?}", id)]
-        InternetProtocolId {
-            id: layer3::InternetProtocolId
-        },
-    }
-
-    unsafe impl Sync for Error {}
-    unsafe impl Send for Error {}
-
-    impl From<layer4::errors::Error> for Error {
-        fn from(v: layer4::errors::Error) -> Self {
-            Error::L4(v)
-        }
-    }
-}
-
 pub struct IPv4<'a> {
-    dst_ip: std::net::IpAddr,
-    src_ip: std::net::IpAddr,
-    flags: u16,
-    ttl: u8,
-    protocol: InternetProtocolId,
-    payload: &'a [u8],
+    pub dst_ip: std::net::IpAddr,
+    pub src_ip: std::net::IpAddr,
+    pub flags: u16,
+    pub ttl: u8,
+    pub protocol: InternetProtocolId,
+    pub payload: &'a [u8],
 }
 
 fn to_ip_address(i: &[u8]) -> std::net::IpAddr {
@@ -68,19 +34,6 @@ fn is_zero(v: u8) -> bool {
 }
 
 impl<'a> IPv4<'a> {
-    pub fn dst_ip(&self) -> &std::net::IpAddr {
-        &self.dst_ip
-    }
-    pub fn src_ip(&self) -> &std::net::IpAddr {
-        &self.src_ip
-    }
-    pub fn protocol(&self) -> &InternetProtocolId {
-        &self.protocol
-    }
-    pub fn payload(&self) -> &'a [u8] {
-        &self.payload
-    }
-
     fn parse_ipv4<'b>(
         input: &'b [u8],
         input_length: usize,
@@ -183,70 +136,13 @@ impl<'a> IPv4<'a> {
     }
 }
 
-impl<'a> TryFrom<IPv4<'a>> for Layer3FlowInfo {
-    type Error = errors::Error;
-
-    fn try_from(value: IPv4<'a>) -> Result<Self, Self::Error> {
-        debug!("Creating stream info from {:?}", value.protocol);
-        let l4 = match value.protocol.clone() {
-            InternetProtocolId::Tcp => {
-                Tcp::parse(value.payload()).map_err(|ref e| {
-                    #[cfg(feature = "log-errors")]
-                    error!("Error parsing tcp {:?}", e);
-                    let l4_error = crate::layer4::tcp::errors::Error::Nom(e.into());
-                    errors::Error::L4(l4_error.into())
-                })
-                .and_then(|r| {
-                    let (rem, l4) = r;
-                    if rem.is_empty() {
-                        Layer4FlowInfo::try_from(l4).map_err(|e| errors::Error::L4(e.into()))
-                    } else {
-                        Err(errors::Error::Incomplete {
-                            size: rem.len()
-                        })
-                    }
-                })
-            }
-            InternetProtocolId::Udp => {
-                Udp::parse(value.payload()).map_err(|ref e| {
-                    #[cfg(feature = "log-errors")]
-                    error!("Error parsing udp {:?}", e);
-                    let l4_error = crate::layer4::tcp::errors::Error::Nom(e.into());
-                    errors::Error::L4(l4_error.into())
-                })
-                .and_then(|r| {
-                    let (rem, l4) = r;
-                    if rem.is_empty() {
-                        Layer4FlowInfo::try_from(l4).map_err(|e| errors::Error::L4(e.into()))
-                    } else {
-                        Err(errors::Error::Incomplete {
-                            size: rem.len()
-                        })
-                    }
-                })
-            }
-            _ => Err(errors::Error::InternetProtocolId {
-                id: value.protocol
-            }),
-        }?;
-
-        Ok(Layer3FlowInfo {
-            src_ip: value.src_ip,
-            dst_ip: value.dst_ip,
-            layer4: l4,
-        })
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    extern crate env_logger;
-    extern crate hex_slice;
-    use self::hex_slice::AsHex;
+pub mod tests {
+    use hex_slice::AsHex;
 
     use super::*;
 
-    const RAW_DATA: &'static [u8] = &[
+    pub const RAW_DATA: &'static [u8] = &[
         0x45u8, //version and header length
         0x00u8, //tos
         0x00u8, 0x48u8, //length, 20 bytes for header, 52 bytes for ethernet
@@ -282,48 +178,24 @@ mod tests {
 
         assert!(rem.is_empty());
         assert_eq!(
-            *l3.src_ip(),
+            l3.src_ip,
             "1.2.3.4"
                 .parse::<std::net::IpAddr>()
                 .expect("Could not parse ip address")
         );
         assert_eq!(
-            *l3.dst_ip(),
+            l3.dst_ip,
             "10.11.12.13"
                 .parse::<std::net::IpAddr>()
                 .expect("Could not parse ip address")
         );
 
-        let is_tcp = if let InternetProtocolId::Tcp = l3.protocol() {
+        let is_tcp = if let InternetProtocolId::Tcp = l3.protocol {
             true
         } else {
             false
         };
 
         assert!(is_tcp);
-    }
-
-    #[test]
-    fn convert_ipv4() {
-        let _ = env_logger::try_init();
-
-        let (rem, l3) = IPv4::parse(RAW_DATA).expect("Unable to parse");
-
-        let info = Layer3FlowInfo::try_from(l3).expect("Could not convert to layer 3 info");
-
-        assert_eq!(
-            info.src_ip,
-            "1.2.3.4"
-                .parse::<std::net::IpAddr>()
-                .expect("Could not parse ip address")
-        );
-        assert_eq!(
-            info.dst_ip,
-            "10.11.12.13"
-                .parse::<std::net::IpAddr>()
-                .expect("Could not parse ip address")
-        );
-        assert_eq!(info.layer4.src_port, 50871);
-        assert_eq!(info.layer4.dst_port, 80);
     }
 }

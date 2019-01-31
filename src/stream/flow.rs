@@ -1,7 +1,5 @@
-use crate::{
-    errors::Error,
-    flow::{Flow, FlowExtraction},
-};
+use crate::flow::{Flow, FlowExtraction};
+use crate::flow::errors::Error;
 
 use futures::{self, try_ready, Async, Poll, Stream};
 use log::*;

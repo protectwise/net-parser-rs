@@ -2,12 +2,18 @@ use std;
 
 pub const MAC_LENGTH: usize = 6;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MacAddress(pub [u8; MAC_LENGTH]);
 
 pub type Vlan = u16;
 
 pub type Port = u16;
+
+impl Default for MacAddress {
+    fn default() -> Self {
+        MacAddress([0u8; MAC_LENGTH])
+    }
+}
 
 impl std::fmt::Display for MacAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
