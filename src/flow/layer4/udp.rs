@@ -6,13 +6,6 @@ use crate::flow::info::layer4::{Id, Info as L4Info};
 use crate::flow::layer4::FlowExtraction;
 use crate::layer4::udp::Udp;
 
-use log::*;
-use nom::*;
-use std;
-use std::convert::TryFrom;
-
-const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
-
 pub mod errors {
     use crate::nom_error;
     use failure::Fail;

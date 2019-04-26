@@ -6,11 +6,6 @@ use crate::flow::info::layer4::{Id, Info as L4Info};
 use crate::flow::layer4::FlowExtraction;
 use crate::layer4::tcp::Tcp;
 
-use log::*;
-
-const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
-const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
-
 pub mod errors {
     use crate::nom_error;
     use failure::Fail;

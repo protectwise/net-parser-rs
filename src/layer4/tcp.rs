@@ -1,7 +1,5 @@
 use log::*;
-use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
-use std;
-use std::convert::TryFrom;
+use nom::{ErrorKind as NomErrorKind, *};
 
 const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
 const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
@@ -58,10 +56,10 @@ impl<'a> Tcp<'a> {
                         Err(error_position!(input, NomErrorKind::CondReduce::<u32>))
                     }
                 })
-                >> window: be_u16
-                >> check: be_u16
-                >> urgent: be_u16
-                >> options: take!(header_length_and_flags.0 - MINIMUM_HEADER_BYTES)
+                >> _window: be_u16
+                >> _check: be_u16
+                >> _urgent: be_u16
+                >> _options: take!(header_length_and_flags.0 - MINIMUM_HEADER_BYTES)
                 >> payload: rest
                 >> (Tcp {
                     dst_port: dst_port,

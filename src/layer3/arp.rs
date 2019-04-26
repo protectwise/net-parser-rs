@@ -1,11 +1,7 @@
 use crate::common::{MacAddress, MAC_LENGTH};
-use crate::layer4::{tcp::*, udp::*, Layer4};
 
 use arrayref::array_ref;
-use log::*;
-use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
-
-use std::{self, convert::TryFrom};
+use nom::*;
 
 pub struct Arp {
     pub sender_ip: std::net::IpAddr,
@@ -56,10 +52,10 @@ impl Arp {
     pub fn parse(input: &[u8]) -> IResult<&[u8], Arp> {
         do_parse!(
             input,
-            hardware_type: be_u16 >>
-            protocol_type: be_u16 >>
-            hardware_address_length: be_u8 >>
-            protocol_address_length: be_u8 >>
+            _hardware_type: be_u16 >>
+            _protocol_type: be_u16 >>
+            _hardware_address_length: be_u8 >>
+            _protocol_address_length: be_u8 >>
             operation: be_u16 >>
             sender_hardware_address: mac_address >> // ethernet address size is 6 bytes
             sender_protocol_address: ipv4_address >> // ipv4 address size is 4

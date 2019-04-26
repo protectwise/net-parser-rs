@@ -1,7 +1,5 @@
 use log::*;
 use nom::*;
-use std;
-use std::convert::TryFrom;
 
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
@@ -28,7 +26,7 @@ impl<'a> Udp<'a> {
             src_port: be_u16
                 >> dst_port: be_u16
                 >> length: map!(be_u16, |s| (s as usize) - HEADER_LENGTH)
-                >> checksum: be_u16
+                >> _checksum: be_u16
                 >> payload: take!(length)
                 >> (Udp {
                     dst_port: dst_port,

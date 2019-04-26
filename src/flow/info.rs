@@ -22,8 +22,6 @@ pub mod layer2 {
 }
 
 pub mod layer3 {
-    use crate::layer3::InternetProtocolId;
-
     use std::net::IpAddr;
 
     ///

@@ -1,4 +1,3 @@
-use log::*;
 use nom::*;
 
 const MAGIC_NUMBER: u32 = 0xA1B2C3D4u32;
@@ -10,6 +9,7 @@ pub const NATIVE_ENDIAN: Endianness = Endianness::Big;
 ///
 /// Global header associated with libpcap capture files
 ///
+#[allow(unused)]
 pub struct GlobalHeader {
     endianness: Endianness,
     version_major: u16,
@@ -48,6 +48,7 @@ impl GlobalHeader {
                 } else {
                     Endianness::Little
                 };
+                #[cfg(feature = "log-errors")]
                 debug!("Using endianness {:?} read {:02x} compared to magic number {:02x}, setting endianness to {:?}", NATIVE_ENDIAN, e, MAGIC_NUMBER, res);
                 res
             }) >> version_major: u16!(endianness)

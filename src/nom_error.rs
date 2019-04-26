@@ -1,4 +1,4 @@
-use failure::{err_msg, Fail};
+use failure::Fail;
 
 #[derive(Debug, Fail)]
 pub enum Error {

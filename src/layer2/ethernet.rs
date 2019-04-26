@@ -1,14 +1,10 @@
 use crate::common::{MacAddress, Vlan, MAC_LENGTH};
-use crate::layer3::{self, arp::*, ipv4::*, ipv6::*, Layer3};
 
 use arrayref::array_ref;
 use log::*;
 use nom::*;
 
-use std::{self, convert::TryFrom};
-
 const ETHERNET_PAYLOAD: u16 = 1500u16;
-const VLAN_LENGTH: usize = 2;
 
 ///
 /// List of valid ethernet types that aren't payload or vlan. https://en.wikipedia.org/wiki/EtherType
@@ -44,7 +40,7 @@ impl EthernetTypeId {
             0x86ddu16 => Some(EthernetTypeId::L3(Layer3Id::IPv6)),
             0x0806u16 => Some(EthernetTypeId::L3(Layer3Id::Arp)),
             x if x <= ETHERNET_PAYLOAD => Some(EthernetTypeId::PayloadLength(x)),
-            x => {
+            _ => {
                 //TODO: change to warn once list is more complete
                 debug!("Encountered {:02x} when parsing Ethernet type", vlan);
                 None
@@ -53,6 +49,7 @@ impl EthernetTypeId {
     }
 }
 
+#[allow(unused)]
 pub struct VlanTag {
     vlan_type: VlanTypeId,
     prio: u8,
@@ -182,10 +179,6 @@ impl<'a> Ethernet<'a> {
 
 #[cfg(test)]
 pub mod tests {
-    extern crate env_logger;
-    extern crate hex_slice;
-    use self::hex_slice::AsHex;
-
     use super::*;
 
     pub const PAYLOAD_RAW_DATA: &'static [u8] = &[

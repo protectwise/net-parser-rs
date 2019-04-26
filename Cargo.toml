@@ -10,23 +10,22 @@ readme = "README.md"
 keywords=["pcap","packet","network"]
 categories=["encoding","network-programming","parsing"]
 
-[features]
-default = []
-
-# Log flow errors
-log-errors = []
-
 [dependencies]
 arrayref = "0.3"
-nom = "4.1"
+nom = "4"
 failure = "0.1"
 failure_derive = "0.1"
-futures = "0.1"
 log = "0.4"
 
 [dev-dependencies]
+criterion = "0.2"
 env_logger = "0.6"
 hex-slice = "0.1"
 tokio = "0.1"
 regex = "1"
 hex = "0.3"
+
+[[bench]]
+path = "benches/benches.rs"
+name = "bench_net_parser"
+harness = false

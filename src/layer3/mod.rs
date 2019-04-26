@@ -7,7 +7,6 @@ pub use ipv4::IPv4 as IPv4;
 pub use ipv6::IPv6 as IPv6;
 
 use log::*;
-use std;
 
 ///
 /// Available layer 3 representations

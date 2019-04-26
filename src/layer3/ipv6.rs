@@ -1,13 +1,10 @@
 use arrayref::array_ref;
 use crate::layer3::InternetProtocolId;
-use crate::layer4::{self, tcp::*, udp::*, Layer4};
 use log::*;
 use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 use std;
-use std::convert::TryFrom;
 
 const ADDRESS_LENGTH: usize = 16;
-const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
 pub struct IPv6<'a> {
     pub dst_ip: std::net::IpAddr,
@@ -105,8 +102,6 @@ impl<'a> IPv6<'a> {
 
 #[cfg(test)]
 pub mod tests {
-    use hex_slice::AsHex;
-
     use super::*;
 
     pub const RAW_DATA: &'static [u8] = &[

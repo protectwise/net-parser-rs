@@ -7,8 +7,9 @@ use crate::flow::layer4::FlowExtraction;
 use crate::layer2::ethernet::Ethernet;
 use crate::layer4::Vxlan;
 
+use log::*;
+
 pub mod errors {
-    use crate::flow::layer2::ethernet::errors::{Error as EthernetError};
     use crate::layer2::ethernet::EthernetTypeId;
     use crate::nom_error;
     use failure::Fail;
@@ -29,10 +30,9 @@ pub mod errors {
 }
 
 impl<'a> FlowExtraction for Vxlan<'a> {
-    fn extract_flow(&self, l2: L2Info, l3: L3Info) -> Result<Flow, Error> {
+    fn extract_flow(&self, _l2: L2Info, _l3: L3Info) -> Result<Flow, Error> {
         Ethernet::parse(self.payload)
             .map_err(|ref e| {
-                #[cfg(feature = "log-errors")]
                 error!("Error parsing ethernet {:?}", e);
                 Error::L4(errors::Error::Nom(e.into()).into())
             })

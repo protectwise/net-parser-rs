@@ -1,9 +1,4 @@
-use crate::layer2::{ethernet::Ethernet, Layer2};
-
-use log::*;
-use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
-
-use std::{self, convert::TryFrom};
+use nom::*;
 
 ///
 /// Pcap record associated with a libpcap capture
@@ -75,7 +70,7 @@ impl<'a> std::fmt::Display for PcapRecord<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.timestamp
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| std::fmt::Error)
+            .map_err(|_e| std::fmt::Error)
             .and_then(|d| {
                 write!(
                     f,
@@ -91,8 +86,6 @@ impl<'a> std::fmt::Display for PcapRecord<'a> {
 
 #[cfg(test)]
 mod tests {
-    extern crate env_logger;
-
     use super::*;
 
     use crate::flow::FlowExtraction;
@@ -180,7 +173,7 @@ mod tests {
     fn convert_record() {
         let _ = env_logger::try_init();
 
-        let (rem, mut record) =
+        let (rem, record) =
             PcapRecord::parse(RAW_DATA, nom::Endianness::Big).expect("Could not parse");
 
         assert!(rem.is_empty());

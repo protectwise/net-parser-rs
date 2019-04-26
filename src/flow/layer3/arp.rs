@@ -4,12 +4,6 @@ use crate::flow::info::layer2::Info;
 use crate::flow::layer3::FlowExtraction;
 use crate::layer3::Arp;
 
-use arrayref::array_ref;
-use log::*;
-use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
-
-use std::{self, convert::TryFrom};
-
 pub mod errors {
     use crate::nom_error;
     use failure::Fail;
@@ -27,7 +21,7 @@ pub mod errors {
 }
 
 impl FlowExtraction for Arp {
-    fn extract_flow(&self, l2: Info) -> Result<Flow, Error> {
+    fn extract_flow(&self, _l2: Info) -> Result<Flow, Error> {
         Err(Error::L3(errors::Error::Flow.into()))
     }
 }

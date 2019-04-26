@@ -1,14 +1,10 @@
 use crate::layer3::InternetProtocolId;
-use crate::layer4::{tcp::*, udp::*, Layer4};
 
 use arrayref::array_ref;
 use log::*;
 use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
 
-use std::{self, convert::TryFrom};
-
 const ADDRESS_LENGTH: usize = 4;
-const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
 pub struct IPv4<'a> {
     pub dst_ip: std::net::IpAddr,
@@ -28,10 +24,6 @@ named!(
     ipv4_address<&[u8], std::net::IpAddr>,
     map!(take!(ADDRESS_LENGTH), to_ip_address)
 );
-
-fn is_zero(v: u8) -> bool {
-    v == 0u8
-}
 
 impl<'a> IPv4<'a> {
     fn parse_ipv4<'b>(
@@ -54,7 +46,7 @@ impl<'a> IPv4<'a> {
             additional_length
         );
 
-        let (rem, (tos, length)) = do_parse!(
+        let (rem, (_tos, length)) = do_parse!(
             input,
             tos: be_u8
                 >> length: map!(be_u16, |s| {
@@ -74,11 +66,11 @@ impl<'a> IPv4<'a> {
 
         do_parse!(
             rem,
-            id: be_u16
+            _id: be_u16
                 >> flags: be_u16
                 >> ttl: be_u8
                 >> proto: map_opt!(be_u8, InternetProtocolId::new)
-                >> checksum: be_u16
+                >> _checksum: be_u16
                 >> src_ip: ipv4_address
                 >> dst_ip: ipv4_address
                 >> payload: take!(length)
@@ -138,8 +130,6 @@ impl<'a> IPv4<'a> {
 
 #[cfg(test)]
 pub mod tests {
-    use hex_slice::AsHex;
-
     use super::*;
 
     pub const RAW_DATA: &'static [u8] = &[

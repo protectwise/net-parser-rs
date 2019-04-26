@@ -1,15 +1,4 @@
-use crate::{
-    record::{
-        PcapRecord
-    },
-    layer4::udp::Udp,
-    layer2::ethernet::Ethernet,
-};
-
-use nom::{
-    *,
-    IResult
-};
+use nom::*;
 
 #[derive(Debug)]
 pub struct Vxlan<'a> {
@@ -35,7 +24,7 @@ impl<'a> Vxlan<'a> {
     }
 
     pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], Vxlan<'b>> {
-        /// TODO: Is Endianness really unknown?
+        // TODO: Is Endianness really unknown?
         do_parse!(input,
             flags: u16!(endianness) >>
             group_policy_id: u16!(endianness) >>

@@ -1,6 +1,5 @@
 pub mod ethernet;
 
-use crate::common::{MacAddress, Vlan, MAC_LENGTH};
 use crate::flow::Flow;
 use crate::flow::errors::Error;
 

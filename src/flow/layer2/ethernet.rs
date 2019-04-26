@@ -9,13 +9,10 @@ use crate::layer3::{IPv4, IPv6, Arp};
 
 use log::*;
 
-use std::convert::TryFrom;
-
 pub mod errors {
-    use crate::flow::layer3;
     use crate::layer2::ethernet::EthernetTypeId;
     use crate::nom_error;
-    use failure::{err_msg, Fail};
+    use failure::Fail;
 
     #[derive(Debug, Fail)]
     pub enum Error {
@@ -59,7 +56,6 @@ impl<'a> FlowExtraction for Ethernet<'a> {
             EthernetTypeId::L3(Layer3Id::IPv4) => {
                 IPv4::parse(&self.payload)
                     .map_err(|ref e| {
-                        #[cfg(feature = "log-errors")]
                         error!("Error parsing ipv4 {:?}", e);
                         let e: L2Error = errors::Error::Nom {
                             l3: ether_type.clone(),
@@ -83,7 +79,6 @@ impl<'a> FlowExtraction for Ethernet<'a> {
             EthernetTypeId::L3(Layer3Id::IPv6) => {
                 IPv6::parse(&self.payload)
                     .map_err(|ref e| {
-                        #[cfg(feature = "log-errors")]
                         error!("Error parsing ipv6 {:?}", e);
                         let e: L2Error = errors::Error::Nom {
                             l3: ether_type.clone(),
@@ -107,7 +102,6 @@ impl<'a> FlowExtraction for Ethernet<'a> {
             EthernetTypeId::L3(Layer3Id::Arp) => {
                 Arp::parse(&self.payload)
                     .map_err(|ref e| {
-                        #[cfg(feature = "log-errors")]
                         error!("Error parsing arp {:?}", e);
                         let e: L2Error = errors::Error::Nom {
                             l3: ether_type.clone(),
@@ -140,8 +134,6 @@ impl<'a> FlowExtraction for Ethernet<'a> {
 
 #[cfg(test)]
 mod tests {
-    use hex_slice::AsHex;
-
     use super::*;
 
     use crate::flow::info::layer2::{Id as L2Id};

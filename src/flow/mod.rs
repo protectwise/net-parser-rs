@@ -5,17 +5,14 @@ pub mod layer2;
 pub mod layer3;
 pub mod layer4;
 
-use crate::common::{MacAddress, Vlan, MAC_LENGTH};
+use crate::common::Vlan;
 use crate::layer2::ethernet::Ethernet;
-use crate::layer3::InternetProtocolId;
 use crate::record::PcapRecord;
 
 use device::Device;
 use errors::Error;
 use layer2::{FlowExtraction as Layer2Extraction};
 use log::*;
-
-use std::net::IpAddr;
 
 ///
 /// Trait that provides necessary information to indicate a flow
@@ -30,7 +27,6 @@ pub trait FlowExtraction {
 
         Ethernet::parse(payload_ref)
             .map_err(|ref e| {
-                #[cfg(feature = "log-errors")]
                 error!("Error parsing ethernet {:?}", e);
                 Error::Nom(e.into())
             })
@@ -109,7 +105,7 @@ pub fn convert_records<'b>(
     let mut results = vec![];
 
     loop {
-        if let Some(mut r) = records.pop() {
+        if let Some(r) = records.pop() {
             match r.extract_flow() {
                 Ok(f) => {
                     results.push( (r, f) );
@@ -128,9 +124,7 @@ pub fn convert_records<'b>(
 
 #[cfg(test)]
 mod tests {
-    extern crate test;
-
-    use test::Bencher;
+    use crate::common::MacAddress;
     use crate::flow::info::layer2::{Id as L2Id};
     use crate::flow::info::layer3::{Id as L3Id};
     use crate::flow::info::layer4::{Id as L4Id};
@@ -177,7 +171,7 @@ mod tests {
             .map(|b| b.unwrap())
             .collect::<std::vec::Vec<u8>>();
 
-        let (rem, (header, mut records)) =
+        let (_, (header, records)) =
             crate::CaptureParser::parse_file(&bytes).expect("Failed to parse");
 
         assert_eq!(header.endianness(), nom::Endianness::Little);
@@ -186,34 +180,5 @@ mod tests {
         let converted_records = convert_records(records);
 
         assert_eq!(converted_records.len(), 236527);
-    }
-
-    #[bench]
-    fn bench_parse_convert(b: &mut Bencher) {
-        let _ = env_logger::try_init();
-
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("4SICS-GeekLounge-151020.pcap");
-
-        let pcap_reader = std::fs::File::open(pcap_path.clone())
-            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
-
-        let bytes = pcap_reader
-            .bytes()
-            .map(|b| b.unwrap())
-            .collect::<std::vec::Vec<u8>>();
-
-        b.iter(|| {
-            let (rem, (header, mut records)) =
-                crate::CaptureParser::parse_file(&bytes).expect("Failed to parse");
-
-            assert_eq!(header.endianness(), nom::Endianness::Little);
-            assert_eq!(records.len(), 246137);
-
-            let converted_records = convert_records(records);
-
-            assert_eq!(converted_records.len(), 236527);
-        });
     }
 }

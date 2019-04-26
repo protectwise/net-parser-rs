@@ -1,7 +1,5 @@
 use crate::common::{MacAddress, MAC_LENGTH};
 
-use std::net::IpAddr;
-
 ///
 /// Representation of a device on the network, with the mac, ip, and port involved in a connection
 ///

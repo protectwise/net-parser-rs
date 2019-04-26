@@ -1,11 +1,8 @@
-#![allow(unused)]
-#![feature(test, try_from)]
 ///! net-parser-rs
 ///!
 ///! Network packet parser, also capable of parsing packet capture files (e.g. libpcap) and the
 ///! associated records.
 ///!
-
 pub mod common;
 pub mod flow;
 pub mod global_header;
@@ -14,7 +11,6 @@ pub mod layer3;
 pub mod layer4;
 pub mod nom_error;
 pub mod record;
-pub mod stream;
 
 use log::*;
 use nom::*;
@@ -23,8 +19,6 @@ use nom::*;
 /// Primary utility for parsing packet captures, either from file, bytes, or interfaces.
 ///
 /// ```text
-///    #![feature(try_from)]
-///
 ///    use net_parser_rs::NetworkParser;
 ///    use std::*;
 ///
@@ -133,10 +127,7 @@ impl CaptureParser {
 
 #[cfg(test)]
 pub mod tests {
-    extern crate test;
-
-    use test::Bencher;
-    use crate::{flow::FlowExtraction, record::PcapRecord, CaptureParser};
+    use crate::{flow::FlowExtraction, CaptureParser};
     use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
@@ -151,7 +142,6 @@ pub mod tests {
             # Comment line
             0090   34 35 36 37                                      4567
         ").expect("Failed to parse bytes");
-            let b = b"4567".to_vec().into_boxed_slice();
             assert_eq!(bytes.len(), 4)
         }
 
@@ -257,12 +247,12 @@ pub mod tests {
     fn convert_packet() {
         let _ = env_logger::try_init();
 
-        let (rem, (header, mut records)) =
+        let (rem, (_, mut records)) =
             CaptureParser::parse_file(RAW_DATA).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
-        let mut record = records.pop().unwrap();
+        let record = records.pop().unwrap();
         let flow = record.extract_flow().expect("Failed to extract flow");
 
         assert_eq!(flow.source.port, 50871);
@@ -285,34 +275,9 @@ pub mod tests {
             .map(|b| b.unwrap())
             .collect::<std::vec::Vec<u8>>();
 
-        let (rem, (header, records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+        let (_, (header, records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
 
         assert_eq!(header.endianness(), Endianness::Little);
         assert_eq!(records.len(), 246137);
-    }
-
-    #[bench]
-    fn bench_parse(b: &mut Bencher) {
-        let _ = env_logger::try_init();
-
-        let pcap_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("4SICS-GeekLounge-151020.pcap");
-
-        let pcap_reader = std::fs::File::open(pcap_path.clone())
-            .expect(&format!("Failed to open pcap path {:?}", pcap_path));
-
-        let bytes = pcap_reader
-            .bytes()
-            .map(|b| b.unwrap())
-            .collect::<std::vec::Vec<u8>>();
-
-        b.iter(|| {
-            let (rem, (header, records)) =
-                CaptureParser::parse_file(&bytes).expect("Failed to parse");
-
-            assert_eq!(header.endianness(), Endianness::Little);
-            assert_eq!(records.len(), 246137);
-        });
     }
 }

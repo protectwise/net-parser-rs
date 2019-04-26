@@ -10,9 +10,6 @@ use crate::layer4::{Tcp, Udp};
 
 use log::*;
 
-const ADDRESS_LENGTH: usize = 4;
-const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
-
 pub mod errors {
     use crate::layer3::InternetProtocolId;
     use crate::nom_error::{Error as NomError};
@@ -52,7 +49,6 @@ impl<'a> FlowExtraction for IPv4<'a> {
         match proto {
             InternetProtocolId::Tcp => {
                 Tcp::parse(self.payload).map_err(|ref e| {
-                    #[cfg(feature = "log-errors")]
                     error!("Error parsing tcp {:?}", e);
                     let e: L3Error = errors::Error::Nom {
                         l4: proto.clone(),
@@ -75,7 +71,7 @@ impl<'a> FlowExtraction for IPv4<'a> {
             }
             InternetProtocolId::Udp => {
                 Udp::parse(self.payload).map_err(|ref e| {
-                    #[cfg(feature = "log-errors")]
+                    #[cfg(feature = "logging")]
                     error!("Error parsing udp {:?}", e);
                     let e: L3Error = errors::Error::Nom {
                         l4: proto.clone(),
@@ -120,7 +116,7 @@ mod tests {
     fn convert_ipv4() {
         let _ = env_logger::try_init();
 
-        let (rem, l3) = IPv4::parse(RAW_DATA).expect("Unable to parse");
+        let (_, l3) = IPv4::parse(RAW_DATA).expect("Unable to parse");
 
         let l2 = L2Info {
             id: L2Id::Ethernet,
