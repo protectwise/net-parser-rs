@@ -10,14 +10,14 @@ use crate::layer4::Vxlan;
 use log::*;
 
 pub mod errors {
+    use crate::errors::Error as NetParserError;
     use crate::layer2::ethernet::EthernetTypeId;
-    use crate::nom_error;
     use failure::Fail;
 
     #[derive(Debug, Fail)]
     pub enum Error {
-        #[fail(display = "Failed parse")]
-        Nom(#[fail(cause)] nom_error::Error),
+        #[fail(display = "Error parsing Vxlan")]
+        NetParser(#[fail(cause)] NetParserError),
         #[fail(display = "Incomplete parse of {:?}: {}", l3, size)]
         Incomplete {
             l3: EthernetTypeId,
@@ -32,9 +32,9 @@ pub mod errors {
 impl<'a> FlowExtraction for Vxlan<'a> {
     fn extract_flow(&self, _l2: L2Info, _l3: L3Info) -> Result<Flow, Error> {
         Ethernet::parse(self.payload)
-            .map_err(|ref e| {
+            .map_err(|e| {
                 error!("Error parsing ethernet {:?}", e);
-                Error::L4(errors::Error::Nom(e.into()).into())
+                Error::L4(errors::Error::NetParser(e).into())
             })
             .and_then(|r| {
                 let (rem, l2) = r;

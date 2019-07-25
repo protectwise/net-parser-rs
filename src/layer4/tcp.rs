@@ -1,3 +1,4 @@
+use crate::Error;
 use log::*;
 use nom::{ErrorKind as NomErrorKind, *};
 
@@ -37,7 +38,7 @@ impl<'a> Tcp<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], Tcp<'b>> {
+    pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], Tcp<'b>), Error> {
         trace!("Available={}", input.len());
 
         do_parse!(
@@ -69,7 +70,7 @@ impl<'a> Tcp<'a> {
                     flags: header_length_and_flags.1,
                     payload: payload.into()
                 })
-        )
+        ).map_err(Error::from)
     }
 }
 

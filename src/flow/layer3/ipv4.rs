@@ -11,16 +11,16 @@ use crate::layer4::{Tcp, Udp};
 use log::*;
 
 pub mod errors {
+    use crate::errors::Error as NetParserError;
     use crate::layer3::InternetProtocolId;
-    use crate::nom_error::{Error as NomError};
     use failure::Fail;
 
     #[derive(Debug, Fail)]
     pub enum Error {
         #[fail(display = "Failed parse of {:?}: {}", l4, err)]
-        Nom {
+        NetParser {
             l4: InternetProtocolId,
-            #[fail(cause)] err: NomError
+            #[fail(cause)] err: NetParserError
         },
         #[fail(display = "Incomplete parse of {:?}: {}", l4, size)]
         Incomplete {
@@ -48,11 +48,11 @@ impl<'a> FlowExtraction for IPv4<'a> {
         let proto = self.protocol.clone();
         match proto {
             InternetProtocolId::Tcp => {
-                Tcp::parse(self.payload).map_err(|ref e| {
+                Tcp::parse(self.payload).map_err(|e| {
                     error!("Error parsing tcp {:?}", e);
-                    let e: L3Error = errors::Error::Nom {
+                    let e: L3Error = errors::Error::NetParser {
                         l4: proto.clone(),
-                        err: e.into()
+                        err: e
                     }.into();
                     e.into()
                 })
@@ -70,12 +70,12 @@ impl<'a> FlowExtraction for IPv4<'a> {
                     })
             }
             InternetProtocolId::Udp => {
-                Udp::parse(self.payload).map_err(|ref e| {
+                Udp::parse(self.payload).map_err(|e| {
                     #[cfg(feature = "logging")]
                     error!("Error parsing udp {:?}", e);
-                    let e: L3Error = errors::Error::Nom {
+                    let e: L3Error = errors::Error::NetParser {
                         l4: proto.clone(),
-                        err: e.into()
+                        err: e
                     }.into();
                     e.into()
                 })

@@ -1,3 +1,4 @@
+use crate::Error;
 use crate::common::{MacAddress, Vlan, MAC_LENGTH};
 
 use arrayref::array_ref;
@@ -162,7 +163,7 @@ impl<'a> Ethernet<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8]) -> nom::IResult<&'b [u8], Ethernet> {
+    pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], Ethernet), Error> {
         trace!("Available={}", input.len());
 
         let r = do_parse!(
@@ -173,7 +174,7 @@ impl<'a> Ethernet<'a> {
         r.and_then(|res| {
             let (rem, (dst_mac, src_mac)) = res;
             Ethernet::parse_vlan_tag(rem, dst_mac, src_mac, vec![])
-        })
+        }).map_err(Error::from)
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::Error;
 use nom::*;
 
 #[derive(Debug)]
@@ -23,7 +24,7 @@ impl<'a> Vxlan<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> nom::IResult<&'b [u8], Vxlan<'b>> {
+    pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> Result<(&'b [u8], Vxlan<'b>), Error> {
         // TODO: Is Endianness really unknown?
         do_parse!(input,
             flags: u16!(endianness) >>
@@ -38,7 +39,7 @@ impl<'a> Vxlan<'a> {
                     payload: payload
                 }
             )
-        )
+        ).map_err(Error::from)
     }
 }
 

@@ -11,15 +11,15 @@ use log::*;
 
 pub mod errors {
     use crate::layer2::ethernet::EthernetTypeId;
-    use crate::nom_error;
+    use crate::errors::Error as NetParserError;
     use failure::Fail;
 
     #[derive(Debug, Fail)]
     pub enum Error {
         #[fail(display = "Failed parse of {:?}: {}", l3, err)]
-        Nom {
+        NetParser {
             l3: EthernetTypeId,
-            #[fail(cause)] err: nom_error::Error
+            #[fail(cause)] err: NetParserError
         },
         #[fail(display = "Incomplete parse of {:?}: {}", l3, size)]
         Incomplete {
@@ -55,11 +55,11 @@ impl<'a> FlowExtraction for Ethernet<'a> {
         match ether_type {
             EthernetTypeId::L3(Layer3Id::IPv4) => {
                 IPv4::parse(&self.payload)
-                    .map_err(|ref e| {
+                    .map_err(|e| {
                         error!("Error parsing ipv4 {:?}", e);
-                        let e: L2Error = errors::Error::Nom {
+                        let e: L2Error = errors::Error::NetParser {
                             l3: ether_type.clone(),
-                            err: e.into()
+                            err: e
                         }.into();
                         e.into()
                     })
@@ -78,11 +78,11 @@ impl<'a> FlowExtraction for Ethernet<'a> {
             }
             EthernetTypeId::L3(Layer3Id::IPv6) => {
                 IPv6::parse(&self.payload)
-                    .map_err(|ref e| {
+                    .map_err(|e| {
                         error!("Error parsing ipv6 {:?}", e);
-                        let e: L2Error = errors::Error::Nom {
+                        let e: L2Error = errors::Error::NetParser {
                             l3: ether_type.clone(),
-                            err: e.into()
+                            err: e
                         }.into();
                         e.into()
                     })
@@ -101,11 +101,11 @@ impl<'a> FlowExtraction for Ethernet<'a> {
             }
             EthernetTypeId::L3(Layer3Id::Arp) => {
                 Arp::parse(&self.payload)
-                    .map_err(|ref e| {
+                    .map_err(|e| {
                         error!("Error parsing arp {:?}", e);
-                        let e: L2Error = errors::Error::Nom {
+                        let e: L2Error = errors::Error::NetParser {
                             l3: ether_type.clone(),
-                            err: e.into()
+                            err: e
                         }.into();
                         e.into()
                     })

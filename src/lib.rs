@@ -4,33 +4,31 @@
 ///! associated records.
 ///!
 pub mod common;
+pub mod file;
 pub mod flow;
 pub mod global_header;
 pub mod layer2;
 pub mod layer3;
 pub mod layer4;
-pub mod nom_error;
+pub mod errors;
 pub mod record;
-
-use log::*;
-use nom::*;
 
 ///
 /// Primary utility for parsing packet captures, either from file, bytes, or interfaces.
 ///
 /// ```text
-///    use net_parser_rs::NetworkParser;
+///    use net_parser_rs;
 ///    use std::*;
 ///
 ///    //Parse a file with global header and packet records
 ///    let file_bytes = include_bytes!("capture.pcap");
-///    let records = CaptureParser::parse_file(file_bytes).expect("Could not parse");
+///    let records = net_parser_rs::parse(file_bytes).expect("Could not parse");
 ///
 ///    //Parse a sequence of one or more packet records
-///    let records = CaptureParser::parse_records(record_bytes).expect("Could not parse");
+///    let records = net_parser_rs::PcapRecords::parse(record_bytes).expect("Could not parse");
 ///
 ///    //Parse a single packet
-///    let packet = CaptureParser::parse_record(packet_bytes).expect("Could not parse");
+///    let packet = net_parser_rs::PcapRecord::parse(packet_bytes).expect("Could not parse");
 ///
 ///    //Convert a packet into stream information
 ///    use net_parser_rs::flow::*;
@@ -38,96 +36,18 @@ use nom::*;
 ///    let stream = Flow::try_from(packet).expect("Could not convert packet");
 ///```
 ///
-pub struct CaptureParser;
+pub use errors::Error as Error;
+pub use file::CaptureFile as CaptureFile;
+pub use global_header::GlobalHeader as GlobalHeader;
+pub use record::{PcapRecord as PcapRecord, PcapRecords as PcapRecords};
 
-impl CaptureParser {
-    ///
-    /// Parse a slice of bytes that start with libpcap file format header (https://wiki.wireshark.org/Development/LibpcapFileFormat)
-    ///
-    pub fn parse_file<'a>(
-        input: &'a [u8],
-    ) -> IResult<
-        &'a [u8],
-        (
-            global_header::GlobalHeader,
-            std::vec::Vec<record::PcapRecord<'a>>,
-        ),
-    > {
-        let header_res = global_header::GlobalHeader::parse(input);
-
-        header_res.and_then(|r| {
-            let (rem, header) = r;
-
-            debug!(
-                "Global header version {}.{}, with endianness {:?}",
-                header.version_major(),
-                header.version_minor(),
-                header.endianness()
-            );
-
-            CaptureParser::parse_records(rem, header.endianness()).map(|records_res| {
-                let (records_rem, records) = records_res;
-
-                trace!("{} bytes left for record parsing", records_rem.len());
-
-                (records_rem, (header, records))
-            })
-        })
-    }
-
-    ///
-    /// Parse a slice of bytes that correspond to a set of records, without libcap file format
-    /// header (https://wiki.wireshark.org/Development/LibpcapFileFormat). Endianness of the byte
-    /// slice must be known.
-    ///
-    pub fn parse_records<'a>(
-        input: &'a [u8],
-        endianness: Endianness,
-    ) -> IResult<&'a [u8], std::vec::Vec<record::PcapRecord<'a>>> {
-        let mut records: std::vec::Vec<record::PcapRecord> = vec![];
-        let mut current = input;
-
-        trace!("{} bytes left for record parsing", current.len());
-
-        loop {
-            match record::PcapRecord::parse(current, endianness) {
-                Ok((rem, r)) => {
-                    current = rem;
-                    trace!("{} bytes left for record parsing", current.len());
-                    records.push(r);
-                }
-                Err(nom::Err::Incomplete(nom::Needed::Size(s))) => {
-                    debug!("Needed {} bytes for parsing, only had {}", s, current.len());
-                    break;
-                }
-                Err(nom::Err::Incomplete(nom::Needed::Unknown)) => {
-                    debug!(
-                        "Needed unknown number of bytes for parsing, only had {}",
-                        current.len()
-                    );
-                    break;
-                }
-                Err(e) => return Err(e),
-            }
-        }
-
-        Ok((current, records))
-    }
-
-    ///
-    /// Parse a slice of bytes as a single record. Endianness must be known.
-    ///
-    pub fn parse_record<'a>(
-        input: &'a [u8],
-        endianness: Endianness,
-    ) -> IResult<&'a [u8], record::PcapRecord<'a>> {
-        record::PcapRecord::parse(input, endianness)
-    }
+pub fn parse<'a>(data: &'a [u8]) -> Result<(&'a [u8], CaptureFile<'a>), Error> {
+    CaptureFile::parse(data)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{flow::FlowExtraction, CaptureParser};
+    use crate::{flow::FlowExtraction, CaptureFile};
     use nom::Endianness;
     use std::io::prelude::*;
     use std::path::PathBuf;
@@ -234,25 +154,25 @@ pub mod tests {
     fn file_bytes_parse() {
         let _ = env_logger::try_init();
 
-        let (rem, (header, records)) =
-            CaptureParser::parse_file(RAW_DATA).expect("Failed to parse");
+        let (rem, f) =
+            CaptureFile::parse(RAW_DATA).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
-        assert_eq!(header.endianness(), Endianness::Big);
-        assert_eq!(records.len(), 1);
+        assert_eq!(f.global_header.endianness, Endianness::Big);
+        assert_eq!(f.records.len(), 1);
     }
 
     #[test]
     fn convert_packet() {
         let _ = env_logger::try_init();
 
-        let (rem, (_, mut records)) =
-            CaptureParser::parse_file(RAW_DATA).expect("Failed to parse");
+        let (rem, f) =
+            CaptureFile::parse(RAW_DATA).expect("Failed to parse");
 
         assert!(rem.is_empty());
 
-        let record = records.pop().unwrap();
+        let record = f.records.into_inner().pop().unwrap();
         let flow = record.extract_flow().expect("Failed to extract flow");
 
         assert_eq!(flow.source.port, 50871);
@@ -275,9 +195,9 @@ pub mod tests {
             .map(|b| b.unwrap())
             .collect::<std::vec::Vec<u8>>();
 
-        let (_, (header, records)) = CaptureParser::parse_file(&bytes).expect("Failed to parse");
+        let (_, f) = CaptureFile::parse(&bytes).expect("Failed to parse");
 
-        assert_eq!(header.endianness(), Endianness::Little);
-        assert_eq!(records.len(), 246137);
+        assert_eq!(f.global_header.endianness, Endianness::Little);
+        assert_eq!(f.records.len(), 246137);
     }
 }
