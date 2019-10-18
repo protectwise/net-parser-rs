@@ -7,6 +7,7 @@ use std::io::{Cursor, Write};
 
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
+#[derive(Clone, Copy, Debug)]
 pub struct Udp<'a> {
     pub src_port: u16,
     pub dst_port: u16,

@@ -13,7 +13,7 @@ const ETHERNET_PAYLOAD: u16 = 1500u16;
 ///
 /// List of valid ethernet types that aren't payload or vlan. https://en.wikipedia.org/wiki/EtherType
 ///
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Layer3Id {
     Lldp,
     IPv4,
@@ -32,7 +32,7 @@ impl Layer3Id {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VlanTypeId {
     VlanTagId,
     ProviderBridging,
@@ -47,7 +47,7 @@ impl VlanTypeId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EthernetTypeId {
     PayloadLength(u16),
     Vlan(VlanTypeId),
@@ -82,6 +82,7 @@ impl EthernetTypeId {
 }
 
 #[allow(unused)]
+#[derive(Clone, Copy, Debug)]
 pub struct VlanTag {
     pub vlan_type: VlanTypeId,
     pub vlan_value: u16,
@@ -96,6 +97,7 @@ impl VlanTag {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Ethernet<'a> {
     pub dst_mac: MacAddress,
     pub src_mac: MacAddress,

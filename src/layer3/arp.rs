@@ -4,6 +4,7 @@ use crate::common::{MacAddress, MAC_LENGTH};
 use arrayref::array_ref;
 use nom::*;
 
+#[derive(Clone, Copy, Debug)]
 pub struct Arp {
     pub sender_ip: std::net::IpAddr,
     pub sender_mac: MacAddress,

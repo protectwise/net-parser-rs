@@ -50,7 +50,7 @@ impl<'a> FlowExtraction for PcapRecord<'a> {
 ///
 /// Flow that was built from a record moved
 ///
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Flow {
     pub source: Device,
     pub destination: Device,

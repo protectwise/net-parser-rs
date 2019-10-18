@@ -7,6 +7,7 @@ use std;
 
 const ADDRESS_LENGTH: usize = 16;
 
+#[derive(Clone, Copy, Debug)]
 pub struct IPv6<'a> {
     pub dst_ip: std::net::IpAddr,
     pub src_ip: std::net::IpAddr,

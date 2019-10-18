@@ -9,6 +9,7 @@ pub use vxlan::Vxlan as Vxlan;
 ///
 /// Available Layer 4 representations
 ///
+#[derive(Clone, Copy, Debug)]
 pub enum Layer4<'a> {
     Tcp(Tcp<'a>),
     Udp(Udp<'a>),

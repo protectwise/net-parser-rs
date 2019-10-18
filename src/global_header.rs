@@ -11,6 +11,7 @@ pub const NATIVE_ENDIAN: Endianness = Endianness::Big;
 /// Global header associated with libpcap capture files
 ///
 #[allow(unused)]
+#[derive(Clone, Copy, Debug)]
 pub struct GlobalHeader {
     pub endianness: Endianness,
     pub version_major: u16,

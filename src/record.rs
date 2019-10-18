@@ -4,6 +4,7 @@ use nom::*;
 
 ///
 /// Collection of pcap records associated with a libpcap capture
+#[derive(Clone, Debug)]
 pub struct PcapRecords<'a> {
     inner: Vec<PcapRecord<'a>>,
 }
@@ -55,6 +56,7 @@ impl<'a> PcapRecords<'a> {
 ///
 /// Pcap record associated with a libpcap capture
 ///
+#[derive(Clone, Copy, Debug)]
 pub struct PcapRecord<'a> {
     pub timestamp: std::time::SystemTime,
     pub actual_length: u32,

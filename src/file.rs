@@ -1,6 +1,7 @@
 use crate::{Error, GlobalHeader, PcapRecords};
 use log::*;
 
+#[derive(Clone, Debug)]
 pub struct CaptureFile<'a> {
     pub global_header: GlobalHeader,
     pub records: PcapRecords<'a>,

@@ -3,7 +3,7 @@ use crate::common::{MacAddress, MAC_LENGTH};
 ///
 /// Representation of a device on the network, with the mac, ip, and port involved in a connection
 ///
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Device {
     pub mac: MacAddress,
     pub ip: std::net::IpAddr,

@@ -4,7 +4,7 @@ pub mod layer2 {
     ///
     /// Representation of layer 2 types that provide information for `Layer2FlowInfo`
     ///
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Id {
         Ethernet,
     }
@@ -12,7 +12,7 @@ pub mod layer2 {
     ///
     /// Information from Layer 2 protocols used in stream determination
     ///
-    #[derive(Debug)]
+    #[derive(Clone, Copy, Debug)]
     pub struct Info {
         pub id: Id,
         pub src_mac: MacAddress,
@@ -27,7 +27,7 @@ pub mod layer3 {
     ///
     /// Representation of Layer3 types that provide information for `Layer3FlowInfo`
     ///
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Id {
         Arp,
         IPv4,
@@ -37,7 +37,7 @@ pub mod layer3 {
     ///
     /// Information from Layer 3 protocols used in flow determination
     ///
-    #[derive(Debug)]
+    #[derive(Clone, Copy, Debug)]
     pub struct Info {
         pub id: Id,
         pub dst_ip: IpAddr,
@@ -49,7 +49,7 @@ pub mod layer4 {
     ///
     /// Representation of Layer3 types that provide information for `Layer3FlowInfo`
     ///
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Id {
         Tcp,
         Udp,
@@ -59,7 +59,7 @@ pub mod layer4 {
     ///
     /// Information from Layer 3 protocols used in flow determination
     ///
-    #[derive(Debug)]
+    #[derive(Clone, Copy, Debug)]
     pub struct Info {
         pub id: Id,
         pub dst_port: u16,

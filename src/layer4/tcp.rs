@@ -8,12 +8,14 @@ use std::io::{Cursor, Write};
 const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
 const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
 
+#[derive(Clone, Copy, Debug)]
 pub struct HeaderLengthAndFlags {
     pub inner: u16,
     pub header_length: usize,
     pub flags: u16,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct Tcp<'a> {
     pub src_port: u16,
     pub dst_port: u16,

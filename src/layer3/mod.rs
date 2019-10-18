@@ -11,6 +11,7 @@ use log::*;
 ///
 /// Available layer 3 representations
 ///
+#[derive(Clone, Copy, Debug)]
 pub enum Layer3<'a> {
     Arp(Arp),
     IPv4(IPv4<'a>),
@@ -21,7 +22,7 @@ pub enum Layer3<'a> {
 ///
 /// IP Protocol numbers https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 ///
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InternetProtocolId {
     AuthenticationHeader,
     HopByHop,

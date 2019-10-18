@@ -2,7 +2,7 @@ use std;
 
 pub const MAC_LENGTH: usize = 6;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MacAddress(pub [u8; MAC_LENGTH]);
 
 pub type Vlan = u16;

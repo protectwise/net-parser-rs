@@ -11,6 +11,7 @@ use std::io::{Cursor, Write};
 
 const ADDRESS_LENGTH: usize = 4;
 
+#[derive(Clone, Copy, Debug)]
 pub struct IPv4<'a> {
     pub version_and_length: u8,
     pub tos: u8,

@@ -4,7 +4,7 @@ use nom::*;
 use std::mem::size_of;
 use std::io::{Cursor, Write};
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Vxlan<'a> {
     pub flags: u16,
     pub group_policy_id: u16,
