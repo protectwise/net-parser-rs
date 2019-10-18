@@ -14,3 +14,13 @@ pub enum Layer4<'a> {
     Udp(Udp<'a>),
     Vxlan(Vxlan<'a>),
 }
+
+impl<'a> Layer4<'a> {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        match self {
+            Layer4::Tcp(v) => v.as_bytes(),
+            Layer4::Udp(v) => v.as_bytes(),
+            Layer4::Vxlan(v) => v.as_bytes(),
+        }
+    }
+}

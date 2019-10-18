@@ -1,27 +1,31 @@
 use crate::Error;
+use byteorder::{BigEndian as BE, WriteBytesExt};
 use nom::*;
+use std::mem::size_of;
+use std::io::{Cursor, Write};
 
 #[derive(Debug)]
 pub struct Vxlan<'a> {
     pub flags: u16,
     pub group_policy_id: u16,
+    pub raw_network_identifier: u32,
     pub network_identifier: u32, // only can use 3 bytes
     pub payload: &'a [u8],
 }
 
 impl<'a> Vxlan<'a> {
-    pub fn new(
-        flags: u16,
-        group_policy_id: u16,
-        network_identifier: u32,
-        payload: &[u8]
-    ) -> Vxlan {
-        Vxlan {
-            flags,
-            group_policy_id,
-            network_identifier,
-            payload,
-        }
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let inner = Vec::with_capacity(
+            size_of::<u16>() * 2
+                + size_of::<u32>()
+                + self.payload.len()
+        );
+        let mut writer = Cursor::new(inner);
+        writer.write_u16::<BE>(self.flags).unwrap();
+        writer.write_u16::<BE>(self.group_policy_id).unwrap();
+        writer.write_u32::<BE>(self.raw_network_identifier).unwrap();
+        writer.write(self.payload).unwrap();
+        writer.into_inner()
     }
 
     pub fn parse<'b>(input: &'b [u8], endianness: nom::Endianness) -> Result<(&'b [u8], Vxlan<'b>), Error> {
@@ -35,6 +39,7 @@ impl<'a> Vxlan<'a> {
                 Vxlan {
                     flags: flags,
                     group_policy_id: group_policy_id,
+                    raw_network_identifier: network_identifier,
                     network_identifier: network_identifier>>8,
                     payload: payload
                 }
@@ -93,6 +98,8 @@ mod tests {
         assert_eq!(remainder.len(), 0);
         assert_eq!(vxlan.flags, 0x0800);
         assert_eq!(vxlan.network_identifier, 123);
+
+        assert_eq!(vxlan.as_bytes().as_slice(), udp.payload);
 
         let enet2 = Ethernet::parse(vxlan.payload).expect("Invalid inner Ethernet").1;
         assert_eq!(format!("{}", enet2.dst_mac), "4a:7f:01:3b:a2:71");

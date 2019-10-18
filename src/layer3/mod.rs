@@ -36,6 +36,20 @@ pub enum InternetProtocolId {
 }
 
 impl InternetProtocolId {
+    pub fn value(&self) -> u8 {
+        match self {
+            InternetProtocolId::AuthenticationHeader => 50,
+            InternetProtocolId::HopByHop => 0,
+            InternetProtocolId::EncapsulatingSecurityPayload => 51,
+            InternetProtocolId::ICMP => 1,
+            InternetProtocolId::IPv6Route => 43,
+            InternetProtocolId::IPv6Fragment => 44,
+            InternetProtocolId::IPv6NoNext => 59,
+            InternetProtocolId::IPv6Options => 60,
+            InternetProtocolId::Tcp => 6,
+            InternetProtocolId::Udp => 17,
+        }
+    }
     pub fn new(value: u8) -> Option<InternetProtocolId> {
         match value {
             0 => Some(InternetProtocolId::HopByHop),

@@ -1,41 +1,57 @@
 use crate::Error;
+use byteorder::{BigEndian as BE, WriteBytesExt};
 use log::*;
 use nom::{ErrorKind as NomErrorKind, *};
+use std::mem::size_of;
+use std::io::{Cursor, Write};
 
 const MINIMUM_HEADER_BYTES: usize = 20; //5 32bit words
 const MAXIMUM_HEADER_BYTES: usize = 60; //15 32bit words
 
+pub struct HeaderLengthAndFlags {
+    pub inner: u16,
+    pub header_length: usize,
+    pub flags: u16,
+}
+
 pub struct Tcp<'a> {
-    pub dst_port: u16,
     pub src_port: u16,
+    pub dst_port: u16,
     pub sequence_number: u32,
     pub acknowledgement_number: u32,
-    pub flags: u16,
+    pub header_length_and_flags: HeaderLengthAndFlags,
+    pub window: u16,
+    pub check: u16,
+    pub urgent: u16,
+    pub options: &'a [u8],
     pub payload: &'a [u8],
 }
 
 impl<'a> Tcp<'a> {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let inner = Vec::with_capacity(
+            size_of::<u16>() * 6
+            + size_of::<u32>() * 2
+            + self.options.len()
+            + self.payload.len()
+        );
+        let mut writer = Cursor::new(inner);
+        writer.write_u16::<BE>(self.src_port).unwrap();
+        writer.write_u16::<BE>(self.dst_port).unwrap();
+        writer.write_u32::<BE>(self.sequence_number).unwrap();
+        writer.write_u32::<BE>(self.acknowledgement_number).unwrap();
+        writer.write_u16::<BE>(self.header_length_and_flags.inner).unwrap();
+        writer.write_u16::<BE>(self.window).unwrap();
+        writer.write_u16::<BE>(self.check).unwrap();
+        writer.write_u16::<BE>(self.urgent).unwrap();
+        writer.write(self.options).unwrap();
+        writer.write(self.payload).unwrap();
+        writer.into_inner()
+    }
+
     pub fn extract_length(value: u16) -> usize {
         let words = value >> 12;
         (words * 4) as usize
-    }
-
-    pub fn new(
-        dst_port: u16,
-        src_port: u16,
-        sequence_number: u32,
-        acknowledgement_number: u32,
-        flags: u16,
-        payload: &'a [u8],
-    ) -> Tcp {
-        Tcp {
-            dst_port,
-            src_port,
-            sequence_number,
-            acknowledgement_number,
-            flags,
-            payload,
-        }
     }
 
     pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], Tcp<'b>), Error> {
@@ -52,22 +68,31 @@ impl<'a> Tcp<'a> {
                     trace!("Header Length={}", hl);
                     if hl >= MINIMUM_HEADER_BYTES && hl <= MAXIMUM_HEADER_BYTES {
                         let flags = v & 0x01FF; //take lower 9 bits
-                        Ok((hl, flags)) as Result<(usize, u16), nom::Context<&[u8]>>
+                        let h = HeaderLengthAndFlags {
+                            inner: v,
+                            header_length: hl,
+                            flags: flags,
+                        };
+                        Ok(h)
                     } else {
                         Err(error_position!(input, NomErrorKind::CondReduce::<u32>))
                     }
                 })
-                >> _window: be_u16
-                >> _check: be_u16
-                >> _urgent: be_u16
-                >> _options: take!(header_length_and_flags.0 - MINIMUM_HEADER_BYTES)
+                >> window: be_u16
+                >> check: be_u16
+                >> urgent: be_u16
+                >> options: take!(header_length_and_flags.header_length - MINIMUM_HEADER_BYTES)
                 >> payload: rest
                 >> (Tcp {
-                    dst_port: dst_port,
                     src_port: src_port,
+                    dst_port: dst_port,
                     sequence_number: sequence_number,
                     acknowledgement_number: acknowledgement_number,
-                    flags: header_length_and_flags.1,
+                    header_length_and_flags: header_length_and_flags,
+                    window: window,
+                    check: check,
+                    urgent: urgent,
+                    options: options,
                     payload: payload.into()
                 })
         ).map_err(Error::from)
@@ -124,5 +149,7 @@ pub mod tests {
             "Payload Mismatch: {:x}",
             l4.payload.as_hex()
         );
+
+        assert_eq!(l4.as_bytes().as_slice(), RAW_DATA);
     }
 }

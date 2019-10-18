@@ -2,23 +2,34 @@ use crate::Error;
 use crate::layer3::InternetProtocolId;
 
 use arrayref::array_ref;
+use byteorder::{BigEndian as BE, WriteBytesExt};
 use log::*;
 use nom::*;
+use std::mem::size_of;
+use std::net::IpAddr;
+use std::io::{Cursor, Write};
 
 const ADDRESS_LENGTH: usize = 4;
 
 pub struct IPv4<'a> {
-    pub dst_ip: std::net::IpAddr,
-    pub src_ip: std::net::IpAddr,
+    pub version_and_length: u8,
+    pub tos: u8,
+    pub raw_length: u16,
+    pub id: u16,
     pub flags: u16,
     pub ttl: u8,
     pub protocol: InternetProtocolId,
+    pub checksum: u16,
+    pub src_ip: IpAddr,
+    pub dst_ip: IpAddr,
     pub payload: &'a [u8],
+    pub options: Option<&'a [u8]>,
+    pub padding: Option<&'a [u8]>,
 }
 
-fn to_ip_address(i: &[u8]) -> std::net::IpAddr {
+fn to_ip_address(i: &[u8]) -> IpAddr {
     let ipv4 = std::net::Ipv4Addr::from(array_ref![i, 0, ADDRESS_LENGTH].clone());
-    std::net::IpAddr::V4(ipv4)
+    IpAddr::V4(ipv4)
 }
 
 named!(
@@ -27,6 +38,40 @@ named!(
 );
 
 impl<'a> IPv4<'a> {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let inner = Vec::with_capacity(
+            size_of::<u8>() * 4
+            + size_of::<u16>() * 4
+            + 4 * 2
+            + self.payload.len()
+            + self.options.map(|i| i.len()).unwrap_or(0)
+            + self.padding.map(|i| i.len()).unwrap_or(0)
+        );
+        let mut writer = Cursor::new(inner);
+        writer.write_u8(self.version_and_length).unwrap();
+        writer.write_u8(self.tos).unwrap();
+        writer.write_u16::<BE>(self.raw_length).unwrap();
+        writer.write_u16::<BE>(self.id).unwrap();
+        writer.write_u16::<BE>(self.flags).unwrap();
+        writer.write_u8(self.ttl).unwrap();
+        writer.write_u8(self.protocol.value()).unwrap();
+        writer.write_u16::<BE>(self.checksum).unwrap();
+        if let IpAddr::V4(v) = self.src_ip {
+            writer.write(&v.octets()).unwrap();
+        }
+        if let IpAddr::V4(v) = self.dst_ip {
+            writer.write(&v.octets()).unwrap();
+        }
+        writer.write(self.payload).unwrap();
+        if let Some(i) = self.options {
+            writer.write(i).unwrap();
+        }
+        if let Some(i) = self.padding {
+            writer.write(i).unwrap();
+        }
+        writer.into_inner()
+    }
+
     fn parse_ipv4<'b>(
         input: &'b [u8],
         input_length: usize,
@@ -47,15 +92,15 @@ impl<'a> IPv4<'a> {
             additional_length
         );
 
-        let (rem, (_tos, length)) = do_parse!(
+        let (rem, (tos, (raw_length, length))) = do_parse!(
             input,
             tos: be_u8
-                >> length: map!(be_u16, |s| {
+                >> lengths: map!(be_u16, |s| {
                     let l = s - (header_length as u16);
                     trace!("Payload Length={}", l);
-                    l
+                    (s, l)
                 })
-                >> ((tos, length))
+                >> ((tos, lengths))
         )?;
 
         let expected_length = header_length as usize + additional_length as usize + length as usize;
@@ -67,47 +112,36 @@ impl<'a> IPv4<'a> {
 
         do_parse!(
             rem,
-            _id: be_u16
+            id: be_u16
                 >> flags: be_u16
                 >> ttl: be_u8
-                >> proto: map_opt!(be_u8, InternetProtocolId::new)
-                >> _checksum: be_u16
+                >> protocol: map_opt!(be_u8, InternetProtocolId::new)
+                >> checksum: be_u16
                 >> src_ip: ipv4_address
                 >> dst_ip: ipv4_address
                 >> payload: take!(length)
-                >> _options: cond!(additional_length > 0, take!(additional_length))
-                >> _padding:
+                >> options: cond!(additional_length > 0, take!(additional_length))
+                >> padding:
                     cond!(
                         input_length > expected_length,
                         take!(input_length - expected_length)
                     )
                 >> (IPv4 {
-                    dst_ip: dst_ip,
-                    src_ip: src_ip,
-                    flags: flags,
-                    ttl: ttl,
-                    protocol: proto,
-                    payload: payload
+                    version_and_length,
+                    tos,
+                    raw_length,
+                    id,
+                    flags,
+                    ttl,
+                    protocol,
+                    checksum,
+                    src_ip,
+                    dst_ip,
+                    payload,
+                    options,
+                    padding,
                 })
         )
-    }
-
-    pub fn new(
-        dst_ip: std::net::Ipv4Addr,
-        src_ip: std::net::Ipv4Addr,
-        flags: u16,
-        ttl: u8,
-        protocol: InternetProtocolId,
-        payload: &'a [u8],
-    ) -> IPv4 {
-        IPv4 {
-            dst_ip: std::net::IpAddr::V4(dst_ip),
-            src_ip: std::net::IpAddr::V4(src_ip),
-            flags: flags,
-            ttl: ttl,
-            protocol: protocol,
-            payload: payload,
-        }
     }
 
     pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], IPv4<'b>), Error> {
@@ -184,5 +218,7 @@ pub mod tests {
         };
 
         assert!(is_tcp);
+
+        assert_eq!(l3.as_bytes().as_slice(), RAW_DATA);
     }
 }

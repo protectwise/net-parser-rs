@@ -12,6 +12,7 @@ categories=["encoding","network-programming","parsing"]
 
 [dependencies]
 arrayref = "0.3"
+byteorder = "1.3"
 nom = "4"
 failure = "0.1"
 failure_derive = "0.1"
@@ -21,7 +22,6 @@ log = "0.4"
 criterion = "0.2"
 env_logger = "0.6"
 hex-slice = "0.1"
-tokio = "0.1"
 regex = "1"
 hex = "0.3"
 

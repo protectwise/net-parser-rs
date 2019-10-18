@@ -2,8 +2,11 @@ use crate::Error;
 use crate::common::{MacAddress, Vlan, MAC_LENGTH};
 
 use arrayref::array_ref;
+use byteorder::{BigEndian as BE, WriteBytesExt};
 use log::*;
 use nom::*;
+use std::mem::size_of;
+use std::io::{Cursor, Write};
 
 const ETHERNET_PAYLOAD: u16 = 1500u16;
 
@@ -18,10 +21,30 @@ pub enum Layer3Id {
     Arp,
 }
 
+impl Layer3Id {
+    pub fn value(&self) -> u16 {
+        match self {
+            Layer3Id::Lldp => 0x88ccu16,
+            Layer3Id::IPv4 => 0x0800u16,
+            Layer3Id::IPv6 => 0x86ddu16,
+            Layer3Id::Arp => 0x0806u16,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum VlanTypeId {
     VlanTagId,
     ProviderBridging,
+}
+
+impl VlanTypeId {
+    pub fn value(&self) -> u16 {
+        match self {
+            VlanTypeId::VlanTagId => 0x8100u16,
+            VlanTypeId::ProviderBridging => 0x88a8u16
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,14 +71,23 @@ impl EthernetTypeId {
             }
         }
     }
+
+    fn value(&self) -> u16 {
+        match self {
+            EthernetTypeId::PayloadLength(v) => *v,
+            EthernetTypeId::Vlan(v) => v.value(),
+            EthernetTypeId::L3(v) => v.value(),
+        }
+    }
 }
 
 #[allow(unused)]
 pub struct VlanTag {
-    vlan_type: VlanTypeId,
-    prio: u8,
-    dei: u8,
-    id: u16,
+    pub vlan_type: VlanTypeId,
+    pub vlan_value: u16,
+    pub prio: u8,
+    pub dei: u8,
+    pub id: u16,
 }
 
 impl VlanTag {
@@ -79,6 +111,24 @@ fn to_mac_address(i: &[u8]) -> MacAddress {
 named!(mac_address<&[u8], MacAddress>, map!(take!(MAC_LENGTH), to_mac_address));
 
 impl<'a> Ethernet<'a> {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let vlans_size = self.vlans.len() * (size_of::<u16>() * 2);
+        let inner = Vec::with_capacity(
+            MAC_LENGTH * 2
+                + size_of::<u16>()
+                + vlans_size
+        );
+        let mut writer = Cursor::new(inner);
+        writer.write(&self.dst_mac.0).unwrap();
+        writer.write(&self.src_mac.0).unwrap();
+        for vlan in &self.vlans {
+            writer.write_u16::<BE>(vlan.vlan_type.value()).unwrap();
+            writer.write_u16::<BE>(vlan.vlan_value).unwrap();
+        }
+        writer.write_u16::<BE>(self.ether_type.value()).unwrap();
+        writer.write(self.payload).unwrap();
+        writer.into_inner()
+    }
     pub fn vlans_to_vlan(vlans: &std::vec::Vec<VlanTag>) -> Vlan {
         let opt_vlan = vlans.first().map(|v| v.vlan());
         opt_vlan.unwrap_or(0)
@@ -118,10 +168,11 @@ impl<'a> Ethernet<'a> {
             do_parse!(input, vlan: map_opt!(be_u16, EthernetTypeId::new) >> (vlan))?;
 
         if let EthernetTypeId::Vlan(vlan_type_id) = vlan {
-            let (input, (prio, dei, id)) = do_parse!(
+            let (input, (value, prio, dei, id)) = do_parse!(
                 input,
                 total: be_u16
                     >> ((
+                        total,
                         (total & 0x7000) as u8,
                         (total & 0x8000) as u8,
                         total & 0x0FFF
@@ -130,6 +181,7 @@ impl<'a> Ethernet<'a> {
 
             let tag = VlanTag {
                 vlan_type: vlan_type_id,
+                vlan_value: value,
                 prio: prio,
                 dei: dei,
                 id: id,
@@ -144,22 +196,6 @@ impl<'a> Ethernet<'a> {
         } else {
             debug!("Encountered non vlan {:?}", vlan);
             Ethernet::parse_not_vlan_tag(input, dst_mac, src_mac, vlan, agg)
-        }
-    }
-
-    pub fn new(
-        dst_mac: MacAddress,
-        src_mac: MacAddress,
-        ether_type: EthernetTypeId,
-        vlans: std::vec::Vec<VlanTag>,
-        payload: &'a [u8],
-    ) -> Ethernet {
-        Ethernet {
-            dst_mac,
-            src_mac,
-            ether_type,
-            vlans,
-            payload,
         }
     }
 
@@ -246,6 +282,7 @@ pub mod tests {
         };
 
         assert!(proto_correct);
+        assert_eq!(l2.as_bytes().as_slice(), PAYLOAD_RAW_DATA);
     }
 
     #[test]
@@ -272,6 +309,7 @@ pub mod tests {
         };
 
         assert!(proto_correct);
+        assert_eq!(l2.as_bytes().as_slice(), TCP_RAW_DATA);
     }
 
     #[test]

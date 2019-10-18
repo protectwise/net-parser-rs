@@ -1,22 +1,32 @@
 use crate::Error;
+use byteorder::{BigEndian as BE, WriteBytesExt};
 use log::*;
 use nom::*;
+use std::mem::size_of;
+use std::io::{Cursor, Write};
 
 const HEADER_LENGTH: usize = 4 * std::mem::size_of::<u16>();
 
 pub struct Udp<'a> {
-    pub dst_port: u16,
     pub src_port: u16,
+    pub dst_port: u16,
+    pub checksum: u16,
     pub payload: &'a [u8],
 }
 
 impl<'a> Udp<'a> {
-    pub fn new(dst_port: u16, src_port: u16, payload: &'a [u8]) -> Udp {
-        Udp {
-            dst_port,
-            src_port,
-            payload,
-        }
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let inner = Vec::with_capacity(
+            size_of::<u16>() * 3
+            + self.payload.len()
+        );
+        let mut writer = Cursor::new(inner);
+        writer.write_u16::<BE>(self.src_port).unwrap();
+        writer.write_u16::<BE>(self.dst_port).unwrap();
+        writer.write_u16::<BE>((self.payload.len() + HEADER_LENGTH) as _).unwrap();
+        writer.write_u16::<BE>(self.checksum).unwrap();
+        writer.write(self.payload).unwrap();
+        writer.into_inner()
     }
 
     pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], Udp<'b>), Error> {
@@ -27,12 +37,13 @@ impl<'a> Udp<'a> {
             src_port: be_u16
                 >> dst_port: be_u16
                 >> length: map!(be_u16, |s| (s as usize) - HEADER_LENGTH)
-                >> _checksum: be_u16
+                >> checksum: be_u16
                 >> payload: take!(length)
                 >> (Udp {
-                    dst_port: dst_port,
-                    src_port: src_port,
-                    payload: payload
+                    src_port,
+                    dst_port,
+                    checksum,
+                    payload
                 })
         ).map_err(Error::from)
     }
@@ -76,5 +87,7 @@ pub mod tests {
             "Payload Mismatch: {:x}",
             l4.payload.as_hex()
         );
+
+        assert_eq!(l4.as_bytes().as_slice(), RAW_DATA);
     }
 }
