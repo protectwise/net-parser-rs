@@ -1,3 +1,4 @@
+use crate::Error;
 use nom::*;
 
 const MAGIC_NUMBER: u32 = 0xA1B2C3D4u32;
@@ -11,33 +12,17 @@ pub const NATIVE_ENDIAN: Endianness = Endianness::Big;
 ///
 #[allow(unused)]
 pub struct GlobalHeader {
-    endianness: Endianness,
-    version_major: u16,
-    version_minor: u16,
-    zone: i32,
-    sig_figs: i32,
-    snap_length: u32,
-    network: u32,
+    pub endianness: Endianness,
+    pub version_major: u16,
+    pub version_minor: u16,
+    pub zone: i32,
+    pub sig_figs: i32,
+    pub snap_length: u32,
+    pub network: u32,
 }
 
 impl GlobalHeader {
-    pub fn endianness(&self) -> Endianness {
-        self.endianness
-    }
-
-    pub fn version_major(&self) -> u16 {
-        self.version_major
-    }
-
-    pub fn version_minor(&self) -> u16 {
-        self.version_minor
-    }
-
-    pub fn snap_length(&self) -> u32 {
-        self.snap_length
-    }
-
-    pub fn parse<'a>(input: &'a [u8]) -> IResult<&'a [u8], GlobalHeader> {
+    pub fn parse<'a>(input: &'a [u8]) -> Result<(&'a [u8], GlobalHeader), Error> {
         do_parse!(
             input,
             endianness: map!(u32!(NATIVE_ENDIAN), |e| {
@@ -66,7 +51,7 @@ impl GlobalHeader {
                     snap_length: snap_length,
                     network: network
                 })
-        )
+        ).map_err(Error::from)
     }
 }
 
@@ -122,10 +107,10 @@ mod tests {
         let (rem, gh) = GlobalHeader::parse(RAW_DATA).expect("Failed to parse header");
 
         assert!(rem.is_empty());
-        assert_eq!(gh.version_major(), 4);
-        assert_eq!(gh.version_minor(), 2);
-        assert_eq!(gh.endianness(), NATIVE_ENDIAN);
-        assert_eq!(gh.snap_length(), 1555);
+        assert_eq!(gh.version_major, 4);
+        assert_eq!(gh.version_minor, 2);
+        assert_eq!(gh.endianness, NATIVE_ENDIAN);
+        assert_eq!(gh.snap_length, 1555);
     }
 
     #[test]
@@ -138,9 +123,9 @@ mod tests {
         };
 
         assert!(rem.is_empty());
-        assert_eq!(gh.version_major(), 4);
-        assert_eq!(gh.version_minor(), 2);
-        assert_eq!(gh.endianness(), expected_endianness);
-        assert_eq!(gh.snap_length(), 1555);
+        assert_eq!(gh.version_major, 4);
+        assert_eq!(gh.version_minor, 2);
+        assert_eq!(gh.endianness, expected_endianness);
+        assert_eq!(gh.snap_length, 1555);
     }
 }

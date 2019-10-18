@@ -5,13 +5,13 @@ use crate::flow::layer3::FlowExtraction;
 use crate::layer3::Arp;
 
 pub mod errors {
-    use crate::nom_error;
+    use crate::errors::Error as NetParserError;
     use failure::Fail;
 
     #[derive(Debug, Fail)]
     pub enum Error {
-        #[fail(display = "Nom error while parsing ARP")]
-        Nom(#[fail(cause)] nom_error::Error),
+        #[fail(display = "Error parsing ARP")]
+        NetParser(#[fail(cause)] NetParserError),
         #[fail(display = "ARP cannot be converted to a flow")]
         Flow,
     }

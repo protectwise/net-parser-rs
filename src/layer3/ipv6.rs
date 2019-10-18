@@ -1,7 +1,8 @@
 use arrayref::array_ref;
+use crate::Error;
 use crate::layer3::InternetProtocolId;
 use log::*;
-use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
+use nom::*;
 use std;
 
 const ADDRESS_LENGTH: usize = 16;
@@ -82,19 +83,16 @@ impl<'a> IPv6<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], IPv6<'b>> {
+    pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], IPv6<'b>), Error> {
         trace!("Available={}", input.len());
 
-        be_u8(input).and_then(|r| {
+        be_u8(input).map_err(Error::from).and_then(|r| {
             let (rem, length_check) = r;
             let version = length_check >> 4;
             if version == 6 {
-                IPv6::parse_ipv6(rem)
+                IPv6::parse_ipv6(rem).map_err(Error::from)
             } else {
-                Err(NomError::convert(NomError::Error(error_position!(
-                    input,
-                    NomErrorKind::CondReduce::<u32>
-                ))))
+                Err(Error::Custom { msg: format!("Expected version 6, version was {}", version) } )
             }
         })
     }

@@ -1,11 +1,11 @@
+use crate::Error as NetParserError;
 use crate::flow::{layer2, layer3, layer4};
-use crate::nom_error::{Error as NomError};
 use failure::Fail;
 
 #[derive(Debug, Fail)]
 pub enum Error {
-    #[fail(display = "Nom error while parsing layer2")]
-    Nom(#[fail(cause)] NomError),
+    #[fail(display = "NetParserError error while parsing layer2")]
+    NetParser(#[fail(cause)] NetParserError),
     #[fail(display = "Layer2 error while parsing")]
     L2(#[fail(cause)] layer2::errors::Error),
     #[fail(display = "Layer3 error while parsing")]

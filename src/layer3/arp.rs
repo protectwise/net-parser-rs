@@ -1,3 +1,4 @@
+use crate::Error;
 use crate::common::{MacAddress, MAC_LENGTH};
 
 use arrayref::array_ref;
@@ -49,7 +50,7 @@ impl Arp {
         }
     }
 
-    pub fn parse(input: &[u8]) -> IResult<&[u8], Arp> {
+    pub fn parse(input: &[u8]) -> Result<(&[u8], Arp), Error> {
         do_parse!(
             input,
             _hardware_type: be_u16 >>
@@ -70,7 +71,7 @@ impl Arp {
                     operation: operation
                 }
             )
-        )
+        ).map_err(Error::from)
     }
 }
 

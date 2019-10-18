@@ -7,7 +7,7 @@ pub mod layer4;
 
 use crate::common::Vlan;
 use crate::layer2::ethernet::Ethernet;
-use crate::record::PcapRecord;
+use crate::PcapRecord;
 
 use device::Device;
 use errors::Error;
@@ -26,9 +26,9 @@ pub trait FlowExtraction {
         let payload_ref = self.payload();
 
         Ethernet::parse(payload_ref)
-            .map_err(|ref e| {
+            .map_err(|e| {
                 error!("Error parsing ethernet {:?}", e);
-                Error::Nom(e.into())
+                Error::NetParser(e)
             })
             .and_then(|r| {
                 let (rem, l2) = r;
@@ -99,8 +99,8 @@ impl std::fmt::Display for Flow {
 /// Utility function to convert a vector of records to flows, unless an error is encountered in stream conversion
 ///
 pub fn convert_records<'b>(
-    records: std::vec::Vec<PcapRecord<'b>>,
-) -> std::vec::Vec<(PcapRecord<'b>, Flow)> {
+    records: Vec<PcapRecord<'b>>,
+) -> Vec<(PcapRecord<'b>, Flow)> {
     let mut records = records;
     let mut results = vec![];
 
@@ -171,13 +171,13 @@ mod tests {
             .map(|b| b.unwrap())
             .collect::<std::vec::Vec<u8>>();
 
-        let (_, (header, records)) =
-            crate::CaptureParser::parse_file(&bytes).expect("Failed to parse");
+        let (_, f) =
+            crate::CaptureFile::parse(&bytes).expect("Failed to parse");
 
-        assert_eq!(header.endianness(), nom::Endianness::Little);
-        assert_eq!(records.len(), 246137);
+        assert_eq!(f.global_header.endianness, nom::Endianness::Little);
+        assert_eq!(f.records.len(), 246137);
 
-        let converted_records = convert_records(records);
+        let converted_records = convert_records(f.records.into_inner());
 
         assert_eq!(converted_records.len(), 236527);
     }

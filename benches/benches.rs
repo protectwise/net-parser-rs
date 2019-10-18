@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use nom::Endianness;
-use net_parser_rs::CaptureParser;
+use net_parser_rs::CaptureFile;
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -21,11 +21,11 @@ fn bench_4sics(c: &mut Criterion) {
             .collect::<std::vec::Vec<u8>>();
 
         b.iter(|| {
-            let (_, (header, records)) =
-                CaptureParser::parse_file(&bytes).expect("Failed to parse");
+            let (_, f) =
+                CaptureFile::parse(&bytes).expect("Failed to parse");
 
-            assert_eq!(header.endianness(), Endianness::Little);
-            assert_eq!(records.len(), 246137);
+            assert_eq!(f.global_header.endianness, Endianness::Little);
+            assert_eq!(f.records.len(), 246137);
         });
     });
 
@@ -53,13 +53,13 @@ fn bench_4sics(c: &mut Criterion) {
             .collect::<std::vec::Vec<u8>>();
 
         b.iter(|| {
-            let (_, (header, records)) =
-                crate::CaptureParser::parse_file(&bytes).expect("Failed to parse");
+            let (_, f) =
+                CaptureFile::parse(&bytes).expect("Failed to parse");
 
-            assert_eq!(header.endianness(), nom::Endianness::Little);
-            assert_eq!(records.len(), 246137);
+            assert_eq!(f.global_header.endianness, nom::Endianness::Little);
+            assert_eq!(f.records.len(), 246137);
 
-            let converted_records = net_parser_rs::flow::convert_records(records);
+            let converted_records = net_parser_rs::flow::convert_records(f.records.into_inner());
 
             assert_eq!(converted_records.len(), 236527);
         });

@@ -7,13 +7,13 @@ use crate::flow::layer4::FlowExtraction;
 use crate::layer4::udp::Udp;
 
 pub mod errors {
-    use crate::nom_error;
+    use crate::errors::Error as NetParserError;
     use failure::Fail;
 
     #[derive(Debug, Fail)]
     pub enum Error {
-        #[fail(display = "Nom error while parsing UDP")]
-        Nom(#[fail(cause)] nom_error::Error),
+        #[fail(display = "Error parsing UDP")]
+        NetParser(#[fail(cause)] NetParserError),
     }
 
     unsafe impl Sync for Error {}

@@ -1,3 +1,4 @@
+use crate::Error;
 use log::*;
 use nom::*;
 
@@ -18,7 +19,7 @@ impl<'a> Udp<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], Udp<'b>> {
+    pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], Udp<'b>), Error> {
         trace!("Available={}", input.len());
 
         do_parse!(
@@ -33,7 +34,7 @@ impl<'a> Udp<'a> {
                     src_port: src_port,
                     payload: payload
                 })
-        )
+        ).map_err(Error::from)
     }
 }
 

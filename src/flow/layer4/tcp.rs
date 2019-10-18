@@ -7,13 +7,13 @@ use crate::flow::layer4::FlowExtraction;
 use crate::layer4::tcp::Tcp;
 
 pub mod errors {
-    use crate::nom_error;
+    use crate::errors::Error as NetParserError;
     use failure::Fail;
 
     #[derive(Debug, Fail)]
     pub enum Error {
-        #[fail(display = "Nom error while parsing TCP")]
-        Nom(#[fail(cause)] nom_error::Error),
+        #[fail(display = "Error Parsing TCP")]
+        NetParser(#[fail(cause)] NetParserError),
     }
 
     unsafe impl Sync for Error {}

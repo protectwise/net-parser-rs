@@ -1,8 +1,9 @@
+use crate::Error;
 use crate::layer3::InternetProtocolId;
 
 use arrayref::array_ref;
 use log::*;
-use nom::{Err as NomError, ErrorKind as NomErrorKind, *};
+use nom::*;
 
 const ADDRESS_LENGTH: usize = 4;
 
@@ -109,20 +110,16 @@ impl<'a> IPv4<'a> {
         }
     }
 
-    pub fn parse<'b>(input: &'b [u8]) -> IResult<&'b [u8], IPv4<'b>> {
+    pub fn parse<'b>(input: &'b [u8]) -> Result<(&'b [u8], IPv4<'b>), Error> {
         let input_len = input.len();
 
-        be_u8(input).and_then(|r| {
+        be_u8(input).map_err(Error::from).and_then(|r| {
             let (rem, version_and_length) = r;
             let version = version_and_length >> 4;
             if version == 4 {
-                IPv4::parse_ipv4(rem, input_len, version_and_length)
+                IPv4::parse_ipv4(rem, input_len, version_and_length).map_err(Error::from)
             } else {
-                let nom_error = NomError::Error(error_position!(
-                    input,
-                    NomErrorKind::CondReduce::<u32>
-                ));
-                Err(nom_error)
+                Err(Error::Custom { msg: format!("Expected version 4, was {}", version) } )
             }
         })
     }

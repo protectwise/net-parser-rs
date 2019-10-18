@@ -1,5 +1,57 @@
+use crate::Error;
+use log::*;
 use nom::*;
 
+///
+/// Collection of pcap records associated with a libpcap capture
+pub struct PcapRecords<'a> {
+    inner: Vec<PcapRecord<'a>>,
+}
+
+impl<'a> PcapRecords<'a> {
+    pub fn len(&self) -> usize { self.inner.len() }
+
+    pub fn into_inner(self) -> Vec<PcapRecord<'a>> { self.inner }
+    ///
+    /// Parse a slice of bytes that correspond to a set of records, without libcap file format
+    /// header (https://wiki.wireshark.org/Development/LibpcapFileFormat). Endianness of the byte
+    /// slice must be known.
+    ///
+    pub fn parse<'b>(
+        input: &'b [u8],
+        endianness: Endianness,
+    ) -> Result<(&'b [u8], PcapRecords<'b>), Error> {
+        let mut records: std::vec::Vec<PcapRecord> = vec![];
+        let mut current = input;
+
+        trace!("{} bytes left for record parsing", current.len());
+
+        loop {
+            match PcapRecord::parse(current, endianness) {
+                Ok((rem, r)) => {
+                    current = rem;
+                    trace!("{} bytes left for record parsing", current.len());
+                    records.push(r);
+                }
+                Err(Error::Incomplete { size: opt_size }) => {
+                    match opt_size {
+                        None => debug!(
+                            "Needed unknown number of bytes for parsing, only had {}",
+                            current.len()
+                        ),
+                        Some(s) => debug!("Needed {} bytes for parsing, only had {:?}", s, current.len()),
+                    }
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok((current, PcapRecords {
+            inner: records
+        }))
+    }
+}
 ///
 /// Pcap record associated with a libpcap capture
 ///
@@ -48,7 +100,7 @@ impl<'a> PcapRecord<'a> {
     pub fn parse<'b>(
         input: &'b [u8],
         endianness: nom::Endianness,
-    ) -> nom::IResult<&'b [u8], PcapRecord<'b>> {
+    ) -> Result<(&'b [u8], PcapRecord<'b>), Error> {
         do_parse!(
             input,
             ts_seconds: u32!(endianness)
@@ -62,7 +114,7 @@ impl<'a> PcapRecord<'a> {
                     original_length: original_length,
                     payload: payload
                 })
-        )
+        ).map_err(Error::from)
     }
 }
 
