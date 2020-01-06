@@ -22,6 +22,20 @@ pub struct GlobalHeader {
     pub network: u32,
 }
 
+impl Default for GlobalHeader {
+    fn default() -> Self {
+        Self {
+            endianness: NATIVE_ENDIAN,
+            version_major: 2,
+            version_minor: 4,
+            zone: 0,
+            sig_figs: 0,
+            snap_length: 1500,
+            network: 1,
+        }
+    }
+}
+
 impl GlobalHeader {
     pub fn parse<'a>(input: &'a [u8]) -> Result<(&'a [u8], GlobalHeader), Error> {
         do_parse!(

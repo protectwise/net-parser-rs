@@ -1,4 +1,4 @@
-use crate::common::{MacAddress, MAC_LENGTH};
+use crate::common::MacAddress;
 
 ///
 /// Representation of a device on the network, with the mac, ip, and port involved in a connection
@@ -13,7 +13,7 @@ pub struct Device {
 impl Default for Device {
     fn default() -> Self {
         Device {
-            mac: MacAddress([0u8; MAC_LENGTH]),
+            mac: MacAddress::default(),
             ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
             port: 0,
         }
