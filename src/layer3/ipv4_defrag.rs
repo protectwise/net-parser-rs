@@ -1,8 +1,8 @@
 use crate::layer3::IPv4;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub struct IPv4Defrag<'a>{
-    fragments: HashMap<usize, IPv4<'a>>,
+    fragments: BTreeMap<usize, IPv4<'a>>,
     max_offset: Option<usize>,
 }
 
@@ -49,10 +49,14 @@ impl <'a> IPv4Defrag<'a> {
         }
 
         if let Some(max_ofset) = self.max_offset {
-
+            let expected_fragments = max_ofset / 8;
+            if self.fragments.len() == expected_fragments {
+                let mut buf: Vec<u8> = vec![0; max_ofset];
+                for (_, frag) in self.fragments.into_iter() {
+                    buf.extend_from_slice(frag.payload)
+                }
+            }
         }
-
-
 
         None
 
