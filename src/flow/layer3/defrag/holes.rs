@@ -30,7 +30,7 @@ impl Default for Holes {
 
 impl Holes {
     //https://tools.ietf.org/html/rfc815
-    fn add(&mut self, frag_start: usize, frag_end: usize, last_frag: bool) -> bool {
+    pub fn add(&mut self, frag_start: usize, frag_end: usize, last_frag: bool) -> bool {
         let mut new_holes = vec![];
         for hole in std::mem::take(&mut self.holes) {
             if frag_start > hole.end || frag_end < hole.start { //Steps #2 and #3

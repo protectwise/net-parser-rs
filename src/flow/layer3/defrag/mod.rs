@@ -1,8 +1,8 @@
 use crate::layer3::IPv4;
 use std::collections::BTreeMap;
 use nom::lib::std::collections::VecDeque;
+use crate::layer3::ipv4::HEADER_LENGTH;
 
-const MAX_LEN: usize = 2 ^ 16 - 1;
 
 mod holes;
 
@@ -29,7 +29,6 @@ impl Flags {
 pub struct IPv4Defrag<'a>{
     holes: holes::Holes,
     buffer: BTreeMap<usize, IPv4<'a>>,
-    max_offset: Option<usize>,
 }
 
 impl <'a> IPv4Defrag<'a> {
@@ -37,34 +36,30 @@ impl <'a> IPv4Defrag<'a> {
         IPv4Defrag {
             holes: holes::Holes::default(),
             buffer: BTreeMap::new(),
-            max_offset: None,
         }
+    }
+
+    fn extract_range_from_flags(flags: &Flags, total_len: usize) -> (usize, usize) {
+        let start = flags.frag_offset as usize * 8;
+        let end = start + (total_len - HEADER_LENGTH);
+        (start, end)
     }
 
 
     pub fn add_packet(&mut self, ipv4: IPv4<'a>) -> Option<IPv4<'a>> {
         let flags = Flags::extract_flags(ipv4.flags);
 
-        /*
         if flags.more_frags  {
-            self.fragments.insert(flags.frag_offset as _, ipv4);
+            let (start, end) = Self::extract_range_from_flags(&flags, ipv4.raw_length as _);
+            self.buffer.insert(flags.frag_offset as _, ipv4);
+            self.holes.add(start, end, false);
         } else if flags.frag_offset != 0 {
-            self.fragments.insert(flags.frag_offset as _, ipv4);
-            self.max_offset = Some(flags.frag_offset as _);
+            let (start, end) = Self::extract_range_from_flags(&flags, ipv4.raw_length as _);
+            self.buffer.insert(flags.frag_offset as _, ipv4);
+            self.holes.add(start, end, true);
         } else { // more flags was false and the offset is 0 == no fragmentation
             return Some(ipv4);
         }
-
-        if let Some(max_ofset) = self.max_offset {
-            let expected_fragments = max_ofset / 8;
-            if self.fragments.len() == expected_fragments {
-                let mut buf: Vec<u8> = vec![0; max_ofset];
-                for (_, frag) in self.fragments.into_iter() {
-                    buf.extend_from_slice(frag.payload)
-                }
-            }
-        }
-         */
 
         None
 

@@ -1,7 +1,6 @@
 pub mod arp;
 pub mod ipv4;
 pub mod ipv6;
-mod defrag;
 
 pub use arp::Arp as Arp;
 pub use ipv4::IPv4 as IPv4;
