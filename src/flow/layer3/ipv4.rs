@@ -31,6 +31,8 @@ pub mod errors {
         InternetProtocolId {
             id: InternetProtocolId
         },
+        #[fail(display = "DefragErrorIPv4: {:?}", msg)]
+        Defrag{msg: String},
     }
 
     unsafe impl Sync for Error {}
