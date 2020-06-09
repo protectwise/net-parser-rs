@@ -7,7 +7,7 @@ Add net-parser-rs to your dependencies
 
 ```toml
 [dependencies]
-net-parser-rs="0.2"
+net-parser-rs="0.3"
 ```
 
 ```rust
