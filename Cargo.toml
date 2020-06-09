@@ -1,7 +1,7 @@
 [package]
 name = "net-parser-rs"
-version = "0.2.0"
-authors = ["ProtectWise, Inc. <https://www.protectwise.com>", "Danny Browning <bdbrowning2@gmail.com>", "Eric Stevens <eric.stevens@protectwise.com>"]
+version = "0.3.0"
+authors = ["ProtectWise, Inc. <https://www.protectwise.com>", "dbcfd <bdbrowning2@gmail.com>", "Eric Stevens <eric.stevens@protectwise.com>"]
 description = "Basic network parser leveraging Rust and nom for safe and efficient packet parsing. Design influenced by pktparse-rs."
 edition = "2018"
 license = "MIT"
@@ -14,8 +14,8 @@ categories=["encoding","network-programming","parsing"]
 arrayref = "0.3"
 byteorder = "1.3"
 nom = "4"
-failure = "0.1"
 log = "0.4"
+thiserror = "1.0"
 
 [dev-dependencies]
 criterion = "0.2"

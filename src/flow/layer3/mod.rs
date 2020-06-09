@@ -17,34 +17,16 @@ pub mod errors {
     use crate::flow::layer3::arp;
     use crate::flow::layer3::ipv4;
     use crate::flow::layer3::ipv6;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "ARP Error")]
-        Arp(#[fail(cause)] arp::errors::Error),
-        #[fail(display = "IPv4 Error")]
-        IPv4(#[fail(cause)] ipv4::errors::Error),
-        #[fail(display = "IPv6 Error")]
-        IPv6(#[fail(cause)] ipv6::errors::Error)
-    }
-
-    impl From<arp::errors::Error> for Error {
-        fn from(v: arp::errors::Error) -> Self {
-            Error::Arp(v)
-        }
-    }
-
-    impl From<ipv4::errors::Error> for Error {
-        fn from(v: ipv4::errors::Error) -> Self {
-            Error::IPv4(v)
-        }
-    }
-
-    impl From<ipv6::errors::Error> for Error {
-        fn from(v: ipv6::errors::Error) -> Self {
-            Error::IPv6(v)
-        }
+        #[error("ARP Error: {0:?}")]
+        Arp(#[from] arp::errors::Error),
+        #[error("IPv4 Error: {0:?}")]
+        IPv4(#[from] ipv4::errors::Error),
+        #[error("IPv6 Error: {0:?}")]
+        IPv6(#[from] ipv6::errors::Error)
     }
 
     unsafe impl Sync for Error {}

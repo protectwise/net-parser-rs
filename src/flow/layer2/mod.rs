@@ -9,18 +9,12 @@ pub trait FlowExtraction {
 
 pub mod errors {
     use crate::flow::layer2::ethernet;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "Ethernet Error")]
-        Ethernet(#[fail(cause)] ethernet::errors::Error),
-    }
-
-    impl From<ethernet::errors::Error> for Error {
-        fn from(v: ethernet::errors::Error) -> Self {
-            Error::Ethernet(v)
-        }
+        #[error("Ethernet Error")]
+        Ethernet(#[from] ethernet::errors::Error),
     }
 
     unsafe impl Sync for Error {}

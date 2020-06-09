@@ -13,21 +13,21 @@ use log::*;
 pub mod errors {
     use crate::errors::Error as NetParserError;
     use crate::layer3::InternetProtocolId;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "Failed parse of {:?}: {}", l4, err)]
+        #[error("Failed parse of {:?}: {}", l4, err)]
         NetParser {
             l4: InternetProtocolId,
-            #[fail(cause)] err: NetParserError
+            err: NetParserError
         },
-        #[fail(display = "Incomplete parse of {:?}: {}", l4, size)]
+        #[error("Incomplete parse of {:?}: {}", l4, size)]
         Incomplete {
             l4: InternetProtocolId,
             size: usize
         },
-        #[fail(display = "Unknown type while parsing IPv4: {:?}", id)]
+        #[error("Unknown type while parsing IPv4: {:?}", id)]
         InternetProtocolId {
             id: InternetProtocolId
         },

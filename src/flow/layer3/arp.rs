@@ -6,13 +6,13 @@ use crate::layer3::Arp;
 
 pub mod errors {
     use crate::errors::Error as NetParserError;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "Error parsing ARP")]
-        NetParser(#[fail(cause)] NetParserError),
-        #[fail(display = "ARP cannot be converted to a flow")]
+        #[error("Error parsing ARP")]
+        NetParser(#[from] NetParserError),
+        #[error("ARP cannot be converted to a flow")]
         Flow,
     }
 

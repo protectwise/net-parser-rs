@@ -1,12 +1,12 @@
-use failure::Fail;
+use thiserror::{Error as ThisError};
 
-#[derive(Clone, Debug, Fail)]
+#[derive(Clone, Debug, ThisError)]
 pub enum Error {
-    #[fail(display = "Incomplete: {:?}", size)]
+    #[error("Incomplete: {0:?}", size)]
     Incomplete { size: Option<usize> },
-    #[fail(display = "{}", msg)]
+    #[error("{0}", msg)]
     Failure { msg: String },
-    #[fail(display = "{}", msg)]
+    #[error("{0}", msg)]
     Custom { msg: String },
 }
 

@@ -18,34 +18,16 @@ pub mod errors {
     use crate::flow::layer4::tcp;
     use crate::flow::layer4::udp;
     use crate::flow::layer4::vxlan;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "Tcp Error")]
-        Tcp(#[fail(cause)] tcp::errors::Error),
-        #[fail(display = "Udp Error")]
-        Udp(#[fail(cause)] udp::errors::Error),
-        #[fail(display = "Vxlan Error")]
-        Vxlan(#[fail(cause)] vxlan::errors::Error),
-    }
-
-    impl From<tcp::errors::Error> for Error {
-        fn from(v: tcp::errors::Error) -> Self {
-            Error::Tcp(v)
-        }
-    }
-
-    impl From<self::udp::errors::Error> for Error {
-        fn from(v: udp::errors::Error) -> Self {
-            Error::Udp(v)
-        }
-    }
-
-    impl From<self::vxlan::errors::Error> for Error {
-        fn from(v: vxlan::errors::Error) -> Self {
-            Error::Vxlan(v)
-        }
+        #[error("Tcp Error: {0:?}")]
+        Tcp(#[from] tcp::errors::Error),
+        #[error("Udp Error: {0:?}")]
+        Udp(#[from] udp::errors::Error),
+        #[error("Vxlan Error: {0:?}")]
+        Vxlan(#[from] vxlan::errors::Error),
     }
 
     unsafe impl Sync for Error {}

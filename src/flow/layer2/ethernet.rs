@@ -12,21 +12,21 @@ use log::*;
 pub mod errors {
     use crate::layer2::ethernet::EthernetTypeId;
     use crate::errors::Error as NetParserError;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "Failed parse of {:?}: {}", l3, err)]
+        #[error("Failed parse of {:?}: {}", l3, err)]
         NetParser {
             l3: EthernetTypeId,
-            #[fail(cause)] err: NetParserError
+            err: NetParserError
         },
-        #[fail(display = "Incomplete parse of {:?}: {}", l3, size)]
+        #[error("Incomplete parse of {:?}: {}", l3, size)]
         Incomplete {
             l3: EthernetTypeId,
             size: usize
         },
-        #[fail(display = "Unknown Ethernet Type: {:?}", etype)]
+        #[error("Unknown Ethernet Type: {:?}", etype)]
         EthernetType {
             etype: EthernetTypeId
         },

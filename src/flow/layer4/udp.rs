@@ -8,12 +8,12 @@ use crate::layer4::udp::Udp;
 
 pub mod errors {
     use crate::errors::Error as NetParserError;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "Error parsing UDP")]
-        NetParser(#[fail(cause)] NetParserError),
+        #[error("Error parsing UDP: {0:?}")]
+        NetParser(#[from] NetParserError),
     }
 
     unsafe impl Sync for Error {}

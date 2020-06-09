@@ -12,13 +12,13 @@ use log::*;
 pub mod errors {
     use crate::errors::Error as NetParserError;
     use crate::layer2::ethernet::EthernetTypeId;
-    use failure::Fail;
+    use thiserror::{Error as ThisError};
 
-    #[derive(Debug, Fail)]
+    #[derive(Debug, ThisError)]
     pub enum Error {
-        #[fail(display = "Error parsing Vxlan")]
-        NetParser(#[fail(cause)] NetParserError),
-        #[fail(display = "Incomplete parse of {:?}: {}", l3, size)]
+        #[error("Error parsing Vxlan: {0:?}")]
+        NetParser(#[from] NetParserError),
+        #[error("Incomplete parse of {:?}: {}", l3, size)]
         Incomplete {
             l3: EthernetTypeId,
             size: usize
