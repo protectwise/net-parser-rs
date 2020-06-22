@@ -2,7 +2,7 @@ pub mod arp;
 pub mod ipv4;
 pub mod ipv6;
 
-mod defrag;
+pub mod defrag;
 
 use crate::flow::Flow;
 use crate::flow::errors::Error;

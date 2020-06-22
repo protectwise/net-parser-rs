@@ -91,7 +91,7 @@ mod tests {
         let ip: IPv4 = IPv4::parse(enet.payload).expect("Invalid IPv4").1;
         assert_eq!(format!("{}", ip.dst_ip), "192.168.56.12");
 
-        let udp: Udp = Udp::parse(ip.payload).expect("Invalid udp").1;
+        let udp: Udp = Udp::parse(&ip.payload).expect("Invalid udp").1;
         assert_eq!(udp.dst_port, 4789);
 
         let (remainder, vxlan) = Vxlan::parse(&udp.payload, nom::Endianness::Big).expect("Invalid VXLAN");
@@ -129,7 +129,7 @@ mod tests {
         let ip: IPv4 = IPv4::parse(enet.payload).expect("Invalid IPv4").1;
         assert_eq!(format!("{}", ip.dst_ip), "1.1.1.1");
 
-        let udp: Udp = Udp::parse(ip.payload).expect("Invalid udp").1;
+        let udp: Udp = Udp::parse(&ip.payload).expect("Invalid udp").1;
         assert_eq!(udp.dst_port, 5300);
 
         let vxlan = Vxlan::parse(&udp.payload, nom::Endianness::Big);

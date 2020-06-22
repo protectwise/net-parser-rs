@@ -4,6 +4,7 @@ pub mod ipv6;
 
 pub use arp::Arp as Arp;
 pub use ipv4::IPv4 as IPv4;
+pub use ipv4::Flags as IPv4Flags;
 pub use ipv6::IPv6 as IPv6;
 
 use log::*;
@@ -11,7 +12,7 @@ use log::*;
 ///
 /// Available layer 3 representations
 ///
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Layer3<'a> {
     Arp(Arp),
     IPv4(IPv4<'a>),

@@ -8,12 +8,40 @@ use nom::*;
 use std::mem::size_of;
 use std::net::IpAddr;
 use std::io::{Cursor, Write};
+use failure::_core::ops::Deref;
 
 const ADDRESS_LENGTH: usize = 4;
 
 pub const HEADER_LENGTH: usize = 20;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
+pub enum Payload<'a> {
+    Slice(&'a [u8]),
+    Owned(Vec<u8>),
+}
+
+impl <'a> Deref for Payload<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl <'a> Payload<'a> {
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            Payload::Slice(s) => {
+                *s
+            },
+            Payload::Owned(v) => {
+                v.as_slice()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct IPv4<'a> {
     pub version_and_length: u8,
     pub tos: u8,
@@ -25,7 +53,7 @@ pub struct IPv4<'a> {
     pub checksum: u16,
     pub src_ip: IpAddr,
     pub dst_ip: IpAddr,
-    pub payload: &'a [u8],
+    pub payload: Payload<'a>,
     pub options: Option<&'a [u8]>,
     pub padding: Option<&'a [u8]>,
 }
@@ -65,7 +93,7 @@ impl<'a> IPv4<'a> {
         if let IpAddr::V4(v) = self.dst_ip {
             writer.write(&v.octets()).unwrap();
         }
-        writer.write(self.payload).unwrap();
+        writer.write(&self.payload).unwrap();
         if let Some(i) = self.options {
             writer.write(i).unwrap();
         }
@@ -122,7 +150,7 @@ impl<'a> IPv4<'a> {
                 >> checksum: be_u16
                 >> src_ip: ipv4_address
                 >> dst_ip: ipv4_address
-                >> payload: take!(length)
+                >> payload: map!(take!(length), Payload::Slice)
                 >> options: cond!(additional_length > 0, take!(additional_length))
                 >> padding:
                     cond!(
@@ -159,6 +187,34 @@ impl<'a> IPv4<'a> {
                 Err(Error::Custom { msg: format!("Expected version 4, was {}", version) } )
             }
         })
+    }
+
+    pub fn flags(&self) -> Flags {
+        Flags::extract_flags(self.flags)
+    }
+}
+
+pub struct Flags {
+    pub do_not_frag: bool,
+    pub more_frags: bool,
+    pub frag_offset: u16,
+}
+
+impl Flags {
+    pub fn extract_flags(flags: u16) -> Flags {
+        let frag_offset = flags & 8191; // 0001,1111,1111,1111
+        let flags = flags >> 13;
+        let more_frags = flags & 1 == 1;
+        let do_not_frag = flags & 2 == 1;
+        Flags {
+            do_not_frag,
+            more_frags,
+            frag_offset
+        }
+    }
+
+    pub fn is_fragment(&self) -> bool {
+        self.more_frags || self.frag_offset != 0
     }
 }
 
