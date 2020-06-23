@@ -15,12 +15,12 @@ const ADDRESS_LENGTH: usize = 4;
 pub const HEADER_LENGTH: usize = 20;
 
 #[derive(Clone, Debug)]
-pub enum Payload<'a> {
+pub enum Bytes<'a> {
     Slice(&'a [u8]),
     Owned(Vec<u8>),
 }
 
-impl <'a> Deref for Payload<'a> {
+impl <'a> Deref for Bytes<'a> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -28,13 +28,13 @@ impl <'a> Deref for Payload<'a> {
     }
 }
 
-impl <'a> Payload<'a> {
+impl <'a> Bytes<'a> {
     pub fn as_slice(&self) -> &[u8] {
         match self {
-            Payload::Slice(s) => {
+            Bytes::Slice(s) => {
                 *s
             },
-            Payload::Owned(v) => {
+            Bytes::Owned(v) => {
                 v.as_slice()
             }
         }
@@ -53,9 +53,9 @@ pub struct IPv4<'a> {
     pub checksum: u16,
     pub src_ip: IpAddr,
     pub dst_ip: IpAddr,
-    pub payload: Payload<'a>,
-    pub options: Option<&'a [u8]>,
-    pub padding: Option<&'a [u8]>,
+    pub payload: Bytes<'a>,
+    pub options: Option<Bytes<'a>>,
+    pub padding: Option<Bytes<'a>>,
 }
 
 fn to_ip_address(i: &[u8]) -> IpAddr {
@@ -75,8 +75,8 @@ impl<'a> IPv4<'a> {
             + size_of::<u16>() * 4
             + 4 * 2
             + self.payload.len()
-            + self.options.map(|i| i.len()).unwrap_or(0)
-            + self.padding.map(|i| i.len()).unwrap_or(0)
+            + self.options.iter().map(|i| i.len()).next().unwrap_or(0)
+            + self.padding.iter().map(|i| i.len()).next().unwrap_or(0)
         );
         let mut writer = Cursor::new(inner);
         writer.write_u8(self.version_and_length).unwrap();
@@ -94,10 +94,10 @@ impl<'a> IPv4<'a> {
             writer.write(&v.octets()).unwrap();
         }
         writer.write(&self.payload).unwrap();
-        if let Some(i) = self.options {
+        if let Some(ref i) = self.options {
             writer.write(i).unwrap();
         }
-        if let Some(i) = self.padding {
+        if let Some(ref i) = self.padding {
             writer.write(i).unwrap();
         }
         writer.into_inner()
@@ -150,12 +150,12 @@ impl<'a> IPv4<'a> {
                 >> checksum: be_u16
                 >> src_ip: ipv4_address
                 >> dst_ip: ipv4_address
-                >> payload: map!(take!(length), Payload::Slice)
-                >> options: cond!(additional_length > 0, take!(additional_length))
+                >> payload: map!(take!(length), Bytes::Slice)
+                >> options: cond!(additional_length > 0, map!(take!(additional_length), Bytes::Slice))
                 >> padding:
                     cond!(
                         input_length > expected_length,
-                        take!(input_length - expected_length)
+                        map!(take!(input_length - expected_length), Bytes::Slice)
                     )
                 >> (IPv4 {
                     version_and_length,

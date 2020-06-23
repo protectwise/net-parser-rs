@@ -7,6 +7,11 @@ pub mod defrag;
 use crate::flow::Flow;
 use crate::flow::errors::Error;
 use crate::flow::info::layer2::Info;
+use crate::flow::layer3::defrag::IPDefrag;
+
+pub struct FlowContext<'a> {
+    ip_defrag: Option<IPDefrag<'a>>
+}
 
 pub trait FlowExtraction {
     fn extract_flow(&self, l2: Info) -> Result<Flow, Error>;
