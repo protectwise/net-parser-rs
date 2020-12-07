@@ -31,6 +31,8 @@ pub mod errors {
         InternetProtocolId {
             id: InternetProtocolId
         },
+        #[fail(display = "Fragment")]
+        Fragment,
     }
 
     unsafe impl Sync for Error {}
@@ -48,7 +50,7 @@ impl<'a> FlowExtraction for IPv4<'a> {
         let proto = self.protocol.clone();
         match proto {
             InternetProtocolId::Tcp => {
-                Tcp::parse(self.payload).map_err(|e| {
+                Tcp::parse(&self.payload).map_err(|e| {
                     error!("Error parsing tcp {:?}", e);
                     let e: L3Error = errors::Error::NetParser {
                         l4: proto.clone(),
@@ -70,7 +72,7 @@ impl<'a> FlowExtraction for IPv4<'a> {
                     })
             }
             InternetProtocolId::Udp => {
-                Udp::parse(self.payload).map_err(|e| {
+                Udp::parse(&self.payload).map_err(|e| {
                     #[cfg(feature = "logging")]
                     error!("Error parsing udp {:?}", e);
                     let e: L3Error = errors::Error::NetParser {

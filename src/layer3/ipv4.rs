@@ -8,10 +8,40 @@ use nom::*;
 use std::mem::size_of;
 use std::net::IpAddr;
 use std::io::{Cursor, Write};
+use failure::_core::ops::Deref;
 
 const ADDRESS_LENGTH: usize = 4;
 
-#[derive(Clone, Copy, Debug)]
+pub const HEADER_LENGTH: usize = 20;
+
+#[derive(Clone, Debug)]
+pub enum Bytes<'a> {
+    Slice(&'a [u8]),
+    Owned(Vec<u8>),
+}
+
+impl <'a> Deref for Bytes<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl <'a> Bytes<'a> {
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            Bytes::Slice(s) => {
+                *s
+            },
+            Bytes::Owned(v) => {
+                v.as_slice()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct IPv4<'a> {
     pub version_and_length: u8,
     pub tos: u8,
@@ -23,9 +53,9 @@ pub struct IPv4<'a> {
     pub checksum: u16,
     pub src_ip: IpAddr,
     pub dst_ip: IpAddr,
-    pub payload: &'a [u8],
-    pub options: Option<&'a [u8]>,
-    pub padding: Option<&'a [u8]>,
+    pub payload: Bytes<'a>,
+    pub options: Option<Bytes<'a>>,
+    pub padding: Option<Bytes<'a>>,
 }
 
 fn to_ip_address(i: &[u8]) -> IpAddr {
@@ -45,8 +75,8 @@ impl<'a> IPv4<'a> {
             + size_of::<u16>() * 4
             + 4 * 2
             + self.payload.len()
-            + self.options.map(|i| i.len()).unwrap_or(0)
-            + self.padding.map(|i| i.len()).unwrap_or(0)
+            + self.options.iter().map(|i| i.len()).next().unwrap_or(0)
+            + self.padding.iter().map(|i| i.len()).next().unwrap_or(0)
         );
         let mut writer = Cursor::new(inner);
         writer.write_u8(self.version_and_length).unwrap();
@@ -63,11 +93,11 @@ impl<'a> IPv4<'a> {
         if let IpAddr::V4(v) = self.dst_ip {
             writer.write(&v.octets()).unwrap();
         }
-        writer.write(self.payload).unwrap();
-        if let Some(i) = self.options {
+        writer.write(&self.payload).unwrap();
+        if let Some(ref i) = self.options {
             writer.write(i).unwrap();
         }
-        if let Some(i) = self.padding {
+        if let Some(ref i) = self.padding {
             writer.write(i).unwrap();
         }
         writer.into_inner()
@@ -120,12 +150,12 @@ impl<'a> IPv4<'a> {
                 >> checksum: be_u16
                 >> src_ip: ipv4_address
                 >> dst_ip: ipv4_address
-                >> payload: take!(length)
-                >> options: cond!(additional_length > 0, take!(additional_length))
+                >> payload: map!(take!(length), Bytes::Slice)
+                >> options: cond!(additional_length > 0, map!(take!(additional_length), Bytes::Slice))
                 >> padding:
                     cond!(
                         input_length > expected_length,
-                        take!(input_length - expected_length)
+                        map!(take!(input_length - expected_length), Bytes::Slice)
                     )
                 >> (IPv4 {
                     version_and_length,
@@ -157,6 +187,34 @@ impl<'a> IPv4<'a> {
                 Err(Error::Custom { msg: format!("Expected version 4, was {}", version) } )
             }
         })
+    }
+
+    pub fn flags(&self) -> Flags {
+        Flags::extract_flags(self.flags)
+    }
+}
+
+pub struct Flags {
+    pub do_not_frag: bool,
+    pub more_frags: bool,
+    pub frag_offset: u16,
+}
+
+impl Flags {
+    pub fn extract_flags(flags: u16) -> Flags {
+        let frag_offset = flags & 8191; // 0001,1111,1111,1111
+        let flags = flags >> 13;
+        let more_frags = flags & 1 == 1;
+        let do_not_frag = flags & 2 == 1;
+        Flags {
+            do_not_frag,
+            more_frags,
+            frag_offset
+        }
+    }
+
+    pub fn is_fragment(&self) -> bool {
+        self.more_frags || self.frag_offset != 0
     }
 }
 
